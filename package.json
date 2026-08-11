@@ -6,6 +6,7 @@
   "packageManager": "yarn@1.22.22",
   "scripts": {
     "preinstall": "npx only-allow yarn",
+    "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",

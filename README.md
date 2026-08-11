@@ -1,9 +1,8 @@
 # jdm_experience_backend
 
 Node.js/TypeScript REST API for the JDM Experience tour/reservation platform, with role-based
-access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), PostgreSQL (Supabase) via Prisma,
-JWT-in-cookie auth, Google Sign-In, and reCAPTCHA verification. Full endpoint reference:
-[`docs/API.md`](docs/API.md).
+access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), PostgreSQL (Supabase) via Prisma, and
+Auth0 for authentication. Full endpoint reference: [`docs/API.md`](docs/API.md).
 
 The React frontend ([`jdm_experience_frontend`](https://github.com/achilleslucas79-bot/jdm_experience_frontend))
 originally specified an earlier endpoint shape in its own `docs/BACKEND_REQUIREMENTS.md` — this
@@ -24,6 +23,13 @@ yarn dev
 ```
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
+
+## Deployment
+
+Deploys to Vercel — `main` auto-deploys to production, PRs get preview URLs. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the one-time dashboard setup (env vars, GitHub
+connection) and how the Express app is wrapped as a serverless function (`api/index.ts`,
+`vercel.json`).
 
 ## Database (Prisma + Supabase Postgres)
 
@@ -75,14 +81,18 @@ yarn seed
 ## Structure
 
 ```
+api/
+  index.ts      Vercel serverless entry — wraps src/app.ts (see docs/DEPLOYMENT.md)
 src/
+  app.ts        Express app (middleware, routes) — imported by both api/index.ts and server.ts
+  server.ts     local dev entry only (app.listen) — not used in the Vercel deployment
   config/       env loading + typed config, Prisma client
   routes/       Express routers, mounted under /api
   controllers/  request handlers (route -> service glue)
   services/     business logic, DB access
   middleware/   auth, RBAC/ownership, validation, error handling
   validators/   Zod schemas per resource
-  lib/          password hashing, JWT, JST date/time, Google/reCAPTCHA verification
+  lib/          Auth0 helpers, JST date/time
   types/        shared TS types, Express Request augmentation
   generated/    Prisma Client output (gitignored — regenerate with `yarn prisma generate`)
 prisma/
