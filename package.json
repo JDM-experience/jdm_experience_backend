@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "db:test": "tsx prisma/test-connection.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -18,7 +19,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@prisma/adapter-mariadb": "^7.9.1",
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
@@ -29,7 +30,7 @@
     "google-auth-library": "^11.0.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "mariadb": "^3.5.3",
+    "pg": "^8.16.3",
     "morgan": "^1.11.0",
     "zod": "^4.4.3"
   },
@@ -41,6 +42,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.2.0",
+    "@types/pg": "^8.15.5",
     "@types/supertest": "^7.2.1",
     "prisma": "^7.9.1",
     "supertest": "^7.2.2",
