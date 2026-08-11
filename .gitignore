@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 src/generated/
+
+# Yarn is the enforced package manager (see package.json "packageManager"
+# and the preinstall guard) — npm/pnpm lockfiles shouldn't be committed.
+package-lock.json
+pnpm-lock.yaml

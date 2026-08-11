@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  // Supabase Postgres today; if this ever needs to move to a MySQL-only host
+  // (e.g. Hostinger), see docs/DATABASE_MIGRATION.md for the provider swap +
+  // data migration steps.
+  provider = "postgresql"
+  // Connection URLs live in prisma.config.ts (Migrate) and src/config/prisma.ts
+  // (runtime client via driver adapter) — Prisma 7 no longer reads them here.
+}
+
+// Minimal model to prove the Prisma <-> Supabase Postgres round trip end to
+// end (migrate, generate, query). Real domain models (User, Tour, Booking,
+// ...) come later when the API itself is built.
+model HealthCheck {
+  id        Int      @id @default(autoincrement())
+  note      String   @default("ok")
+  createdAt DateTime @default(now())
+}

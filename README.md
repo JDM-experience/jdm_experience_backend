@@ -1,8 +1,8 @@
 # jdm_experience_backend
 
 Node.js/TypeScript REST API for the JDM Experience tour/reservation platform, with role-based
-access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), MySQL via Prisma, JWT-in-cookie auth,
-Google Sign-In, and reCAPTCHA verification. Full endpoint reference: [`docs/API.md`](docs/API.md).
+access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), PostgreSQL (Supabase) via Prisma, and
+Auth0 for authentication. Full endpoint reference: [`docs/API.md`](docs/API.md).
 
 The React frontend ([`jdm_experience_frontend`](https://github.com/achilleslucas79-bot/jdm_experience_frontend))
 originally specified an earlier endpoint shape in its own `docs/BACKEND_REQUIREMENTS.md` — this
@@ -11,45 +11,90 @@ project implements the newer RBAC/tours/bookings architecture described in `docs
 
 ## Setup
 
+Yarn is the enforced package manager (see `package.json`'s `packageManager` field and
+`preinstall` guard) — `npm install`/`pnpm install` will refuse to run.
+
 ```bash
-npm install
-cp .env.example .env   # fill in DATABASE_URL and any secrets you have
-npx prisma generate
-npm run dev
+yarn install
+cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and any secrets you have
+yarn prisma generate
+yarn prisma db push    # sync schema.prisma to the database
+yarn dev
 ```
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
+
+## Deployment
+
+Deploys to Vercel — `main` auto-deploys to production, PRs get preview URLs. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the one-time dashboard setup (env vars, GitHub
+connection) and how the Express app is wrapped as a serverless function (`api/index.ts`,
+`vercel.json`).
+
+## Database (Prisma + Supabase Postgres)
+
+The datasource is Supabase Postgres. Supabase gives you two connection strings — both are
+required, for different reasons:
+
+| Env var | Port | Used by | Why |
+|---|---|---|---|
+| `DATABASE_URL` | 6543 | the app at runtime (`src/config/prisma.ts`, via `@prisma/adapter-pg`) | pgbouncer transaction-mode pooling, safe for many short-lived connections |
+| `DIRECT_URL` | 5432 | Prisma Migrate/`db push` (`prisma.config.ts`) | transaction pooling doesn't support the DDL/prepared statements migrations need |
+
+Note the connection URL split is unusual for Prisma 7: connection URLs are no longer read from
+`datasource.url`/`directUrl` in `schema.prisma` — the CLI (Migrate/`db push`) reads its URL from
+`prisma.config.ts`, and the runtime `PrismaClient` gets its URL by constructing a driver adapter
+explicitly in `src/config/prisma.ts`. `schema.prisma`'s `datasource` block only declares the
+`provider`.
+
+After changing `schema.prisma`, sync it to the database with `yarn prisma db push` (or use
+`yarn prisma migrate dev` once you want tracked migration history instead of push-based syncing).
+
+Verify the connection end to end (raw query + a real model create/read) with:
+
+```bash
+yarn db:test
+```
+
+If this ever needs to move to a MySQL-only host (e.g. Hostinger), see
+[`docs/DATABASE_MIGRATION.md`](docs/DATABASE_MIGRATION.md) for the schema/code changes and how
+to move existing data across.
 
 Seed development fixtures (a SUPER_ADMIN, ADMIN, 2 TOUR_GUIDEs, a CUSTOMER, 2 tours, sample
 booking/contact-message — all fake `seed.*@example.com` accounts, password `Password123!`):
 
 ```bash
-npm run seed
+yarn seed
 ```
 
 ## Scripts
 
 | Script | Purpose |
 |---|---|
-| `npm run dev` | Start with hot-reload (`tsx watch`) |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run the compiled build (`dist/server.js`) |
-| `npm test` | Run the test suite (`vitest`) |
-| `npm run seed` | Seed development fixtures (idempotent) |
+| `yarn dev` | Start with hot-reload (`tsx watch`) |
+| `yarn build` | Compile TypeScript to `dist/` |
+| `yarn start` | Run the compiled build (`dist/server.js`) |
+| `yarn test` | Run the test suite (`vitest`) |
+| `yarn seed` | Seed development fixtures (idempotent) |
+| `yarn db:test` | Verify the Prisma <-> database connection |
 
 ## Structure
 
 ```
+api/
+  index.ts      Vercel serverless entry — wraps src/app.ts (see docs/DEPLOYMENT.md)
 src/
+  app.ts        Express app (middleware, routes) — imported by both api/index.ts and server.ts
+  server.ts     local dev entry only (app.listen) — not used in the Vercel deployment
   config/       env loading + typed config, Prisma client
   routes/       Express routers, mounted under /api
   controllers/  request handlers (route -> service glue)
   services/     business logic, DB access
   middleware/   auth, RBAC/ownership, validation, error handling
   validators/   Zod schemas per resource
-  lib/          password hashing, JWT, JST date/time, Google/reCAPTCHA verification
+  lib/          Auth0 helpers, JST date/time
   types/        shared TS types, Express Request augmentation
-  generated/    Prisma Client output (gitignored — regenerate with `npx prisma generate`)
+  generated/    Prisma Client output (gitignored — regenerate with `yarn prisma generate`)
 prisma/
   schema.prisma          the full data model
   migrations/             migration history
