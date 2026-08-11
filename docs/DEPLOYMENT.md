@@ -1,5 +1,7 @@
 # Deploying to Vercel
 
+**Production URL**: https://jdm-experience-backend-one.vercel.app/
+
 The app is structured as a single Express app (`src/app.ts`) wrapped by a Vercel serverless
 function entry point (`api/index.ts`). `vercel.json` rewrites every `/api/*` request to that one
 function, so Express does its normal internal routing (currently just `GET /api/health`) — Vercel
@@ -44,16 +46,21 @@ Prisma-on-Vercel `binaryTargets` headache doesn't apply here.
    None of these are committed to the repo (`.env` is gitignored); the dashboard is the only
    place they live for the deployed app.
 4. **`yarn.lock` is the source of truth** — Vercel auto-detects Yarn from its presence. Don't
-   let `package-lock.json` reappear (see `package.json`'s `packageManager`/`preinstall` guard).
+   let `package-lock.json` reappear (see `package.json`'s `preinstall` guard, which blocks
+   `npm install`). Note: don't add a `packageManager` field to `package.json` — Vercel activates
+   Corepack when it sees one, and that broke the build (`Cannot read properties of undefined
+   (reading 'readFile')`) with this project's TypeScript version.
 
 ## Verifying a deployment
 
 After the first deploy (and after any deploy you're unsure about):
 
 ```bash
-curl -i https://<deployment-url>/api/health
+curl -i https://jdm-experience-backend-one.vercel.app/api/health
 # expect: HTTP 200, {"status":"ok"}
 ```
+
+(Preview deployments get their own URL per branch/PR — swap in that URL to verify a preview instead.)
 
 There's no deployed equivalent of `yarn db:test` yet (that script is dev-only, run locally
 against `.env`) — the health check hitting 200 is the current signal that the deployed function
