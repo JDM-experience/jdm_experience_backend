@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Node.js/TypeScript API for jdm_experience_frontend (see docs/BACKEND_REQUIREMENTS.md in that repo for the spec).",
   "main": "dist/server.js",
-  "packageManager": "yarn@1.22.22",
   "scripts": {
     "preinstall": "npx only-allow yarn",
     "postinstall": "prisma generate",
