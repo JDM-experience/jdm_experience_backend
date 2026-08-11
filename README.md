@@ -11,8 +11,8 @@ project implements the newer RBAC/tours/bookings architecture described in `docs
 
 ## Setup
 
-Yarn is the enforced package manager (see `package.json`'s `packageManager` field and
-`preinstall` guard) — `npm install`/`pnpm install` will refuse to run.
+Yarn is the enforced package manager (see `package.json`'s `preinstall` guard) —
+`npm install`/`pnpm install` will refuse to run.
 
 ```bash
 yarn install
@@ -25,6 +25,8 @@ yarn dev
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
 
 ## Deployment
+
+**Production**: https://jdm-experience-backend-one.vercel.app/
 
 Deploys to Vercel — `main` auto-deploys to production, PRs get preview URLs. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the one-time dashboard setup (env vars, GitHub
