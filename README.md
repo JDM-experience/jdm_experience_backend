@@ -12,12 +12,15 @@ project implements the newer RBAC/tours/bookings architecture described in `docs
 
 ## Setup
 
+Yarn is the enforced package manager (see `package.json`'s `packageManager` field and
+`preinstall` guard) — `npm install`/`pnpm install` will refuse to run.
+
 ```bash
-npm install
+yarn install
 cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and any secrets you have
-npx prisma generate
-npx prisma db push     # sync schema.prisma to the database
-npm run dev
+yarn prisma generate
+yarn prisma db push    # sync schema.prisma to the database
+yarn dev
 ```
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
@@ -38,13 +41,13 @@ Note the connection URL split is unusual for Prisma 7: connection URLs are no lo
 explicitly in `src/config/prisma.ts`. `schema.prisma`'s `datasource` block only declares the
 `provider`.
 
-After changing `schema.prisma`, sync it to the database with `npx prisma db push` (or use
-`prisma migrate dev` once you want tracked migration history instead of push-based syncing).
+After changing `schema.prisma`, sync it to the database with `yarn prisma db push` (or use
+`yarn prisma migrate dev` once you want tracked migration history instead of push-based syncing).
 
 Verify the connection end to end (raw query + a real model create/read) with:
 
 ```bash
-npm run db:test
+yarn db:test
 ```
 
 If this ever needs to move to a MySQL-only host (e.g. Hostinger), see
@@ -55,18 +58,19 @@ Seed development fixtures (a SUPER_ADMIN, ADMIN, 2 TOUR_GUIDEs, a CUSTOMER, 2 to
 booking/contact-message — all fake `seed.*@example.com` accounts, password `Password123!`):
 
 ```bash
-npm run seed
+yarn seed
 ```
 
 ## Scripts
 
 | Script | Purpose |
 |---|---|
-| `npm run dev` | Start with hot-reload (`tsx watch`) |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run the compiled build (`dist/server.js`) |
-| `npm test` | Run the test suite (`vitest`) |
-| `npm run seed` | Seed development fixtures (idempotent) |
+| `yarn dev` | Start with hot-reload (`tsx watch`) |
+| `yarn build` | Compile TypeScript to `dist/` |
+| `yarn start` | Run the compiled build (`dist/server.js`) |
+| `yarn test` | Run the test suite (`vitest`) |
+| `yarn seed` | Seed development fixtures (idempotent) |
+| `yarn db:test` | Verify the Prisma <-> database connection |
 
 ## Structure
 
@@ -80,7 +84,7 @@ src/
   validators/   Zod schemas per resource
   lib/          password hashing, JWT, JST date/time, Google/reCAPTCHA verification
   types/        shared TS types, Express Request augmentation
-  generated/    Prisma Client output (gitignored — regenerate with `npx prisma generate`)
+  generated/    Prisma Client output (gitignored — regenerate with `yarn prisma generate`)
 prisma/
   schema.prisma          the full data model
   migrations/             migration history

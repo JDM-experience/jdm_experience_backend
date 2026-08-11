@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Node.js/TypeScript API for jdm_experience_frontend (see docs/BACKEND_REQUIREMENTS.md in that repo for the spec).",
   "main": "dist/server.js",
+  "packageManager": "yarn@1.22.22",
   "scripts": {
+    "preinstall": "npx only-allow yarn",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -44,6 +46,7 @@
     "@types/node": "^26.2.0",
     "@types/pg": "^8.15.5",
     "@types/supertest": "^7.2.1",
+    "only-allow": "^1.2.1",
     "prisma": "^7.9.1",
     "supertest": "^7.2.2",
     "tsx": "^4.23.11",
