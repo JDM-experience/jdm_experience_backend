@@ -1,65 +1,39 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi'
-import { z } from 'zod'
-import { clientIdParamSchema } from '../validators/client.validator'
+import type { ZodType } from 'zod'
+import { allRoutes } from '../routes'
+import { toOpenApiPath } from '../routes/route-definition'
 
 const registry = new OpenAPIRegistry()
 
-const healthResponseSchema = z
-  .object({ status: z.literal('ok') })
-  .meta({ id: 'HealthResponse' })
+// Every route's docs are generated here from the same RouteDefinition array
+// that builds the Express router (src/routes/index.ts) — adding a new
+// endpoint only means adding one entry to that array, not a second one here.
+for (const route of allRoutes) {
+  const responses: Record<string, { description: string; content?: { 'application/json': { schema: ZodType } } }> = {}
+  for (const [status, def] of Object.entries(route.responses)) {
+    responses[status] = {
+      description: def.description,
+      ...(def.schema ? { content: { 'application/json': { schema: def.schema } } } : {}),
+    }
+  }
 
-const clientSchema = z
-  .object({
-    id: z.number().meta({ example: 2 }),
-    firstName: z.string().meta({ example: 'John' }),
-    lastName: z.string().meta({ example: 'doe' }),
-    age: z.number().meta({ example: 20 }),
-    createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
+  registry.registerPath({
+    method: route.method,
+    path: toOpenApiPath(route.path),
+    summary: route.summary,
+    description: route.description,
+    request: route.request
+      ? {
+          params: route.request.params,
+          query: route.request.query,
+          body: route.request.body
+            ? { content: { 'application/json': { schema: route.request.body } } }
+            : undefined,
+        }
+      : undefined,
+    responses,
   })
-  .meta({ id: 'Client' })
-
-const getClientResponseSchema = z
-  .object({ status: z.literal('ok'), client: clientSchema })
-  .meta({ id: 'GetClientResponse' })
-
-const errorResponseSchema = z
-  .object({ error: z.unknown() })
-  .meta({ id: 'ErrorResponse', description: 'Zod validation errors, or a plain message string.' })
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/health',
-  summary: 'Health check',
-  responses: {
-    200: {
-      description: 'Service is up.',
-      content: { 'application/json': { schema: healthResponseSchema } },
-    },
-  },
-})
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/client/{id}',
-  summary: 'Get a client by id',
-  request: {
-    params: clientIdParamSchema,
-  },
-  responses: {
-    200: {
-      description: 'Client found.',
-      content: { 'application/json': { schema: getClientResponseSchema } },
-    },
-    400: {
-      description: 'id was not a positive integer.',
-      content: { 'application/json': { schema: errorResponseSchema } },
-    },
-    404: {
-      description: 'No client with that id.',
-      content: { 'application/json': { schema: errorResponseSchema } },
-    },
-  },
-})
+}
 
 const generator = new OpenApiGeneratorV3(registry.definitions)
 

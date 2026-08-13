@@ -1,8 +1,15 @@
-import { Router } from 'express'
 import { getHealth } from '../controllers/health.controller'
+import { healthResponseSchema } from '../validators/health.validator'
+import type { RouteDefinition } from './route-definition'
 
-const router = Router()
-
-router.get('/health', getHealth)
-
-export default router
+export const healthRoutes: RouteDefinition[] = [
+  {
+    method: 'get',
+    path: '/health',
+    handler: getHealth,
+    summary: 'Health check',
+    responses: {
+      200: { description: 'Service is up.', schema: healthResponseSchema },
+    },
+  },
+]

@@ -31,17 +31,22 @@ Interactive Swagger UI at `/api/docs` (local: http://localhost:3000/api/docs, pr
 https://jdm-experience-backend-one.vercel.app/api/docs) — documents every endpoint's request/
 response shape and status codes, and lets you try requests directly from the browser.
 
-The spec is generated from the same Zod schemas that validate requests at runtime
-(`@asteasolutions/zod-to-openapi`, `src/docs/openapi.ts`) — not hand-maintained, so it can't drift
-from actual validation. To document a new endpoint:
+The spec is generated from the same `RouteDefinition[]` arrays that build the actual Express
+router (`src/routes/*.routes.ts`, combined in `src/routes/index.ts`) — a route only gets defined
+once, so the docs and the router can't drift out of sync with each other. `src/docs/openapi.ts`
+just loops over that same array and registers each entry with `@asteasolutions/zod-to-openapi`.
 
-1. Add `.meta({ id: '...', ... })` to its request validator in `src/validators/` (see
-   `client.validator.ts` for the pattern) — this both names it as an OpenAPI component and
-   supplies field-level examples/descriptions
-2. Add a matching response schema (a plain Zod schema is enough — it doesn't need to be the same
-   one used elsewhere, just describe the actual response shape) and register the path with
-   `registry.registerPath(...)` in `src/docs/openapi.ts`, covering every status code the endpoint
-   can actually return
+To add a new endpoint (see `client.routes.ts` for the pattern):
+
+1. Add `.meta({ id: '...', ... })` to its request/response Zod schemas in `src/validators/` —
+   this names them as OpenAPI components and supplies field-level examples/descriptions
+2. Add one entry to the resource's `RouteDefinition[]` array (method, path, handler, `request`
+   params/query/body schemas, and a `responses` map covering every status code the endpoint can
+   actually return)
+3. Export that array from `src/routes/<resource>.routes.ts` and spread it into `allRoutes` in
+   `src/routes/index.ts`
+
+That's it — no separate step in `openapi.ts` itself.
 
 `/api/docs` is mounted with a relaxed CSP (`script-src 'unsafe-inline'`, scoped to just that
 route in `app.ts`) since Swagger UI's HTML ships an inline bootstrap script that the global
