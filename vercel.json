@@ -1,5 +1,11 @@
 {
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "node_modules/swagger-ui-dist/{swagger-ui.css,swagger-ui-bundle.js,swagger-ui-standalone-preset.js,favicon-32x32.png,favicon-16x16.png}"
+    }
+  },
   "rewrites": [
+    { "source": "/", "destination": "/api/index" },
     { "source": "/api/(.*)", "destination": "/api/index" }
   ]
 }
