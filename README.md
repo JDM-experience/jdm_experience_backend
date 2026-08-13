@@ -2,12 +2,13 @@
 
 Node.js/TypeScript REST API for the JDM Experience tour/reservation platform, with role-based
 access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), PostgreSQL (Supabase) via Prisma, and
-Auth0 for authentication. Full endpoint reference: [`docs/API.md`](docs/API.md).
+Auth0 for authentication. Full endpoint reference: interactive docs at `/api/docs`
+(http://localhost:3000/api/docs locally, or https://jdm-experience-backend-one.vercel.app/api/docs
+in production) — see [API documentation](#api-documentation) below for how it's generated.
 
 The React frontend ([`jdm_experience_frontend`](https://github.com/achilleslucas79-bot/jdm_experience_frontend))
 originally specified an earlier endpoint shape in its own `docs/BACKEND_REQUIREMENTS.md` — this
-project implements the newer RBAC/tours/bookings architecture described in `docs/API.md` instead
-(see that doc's intro for how the two relate).
+project implements the newer RBAC/tours/bookings architecture instead.
 
 ## Setup
 
@@ -23,6 +24,28 @@ yarn dev
 ```
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
+
+## API documentation
+
+Interactive Swagger UI at `/api/docs` (local: http://localhost:3000/api/docs, production:
+https://jdm-experience-backend-one.vercel.app/api/docs) — documents every endpoint's request/
+response shape and status codes, and lets you try requests directly from the browser.
+
+The spec is generated from the same Zod schemas that validate requests at runtime
+(`@asteasolutions/zod-to-openapi`, `src/docs/openapi.ts`) — not hand-maintained, so it can't drift
+from actual validation. To document a new endpoint:
+
+1. Add `.meta({ id: '...', ... })` to its request validator in `src/validators/` (see
+   `client.validator.ts` for the pattern) — this both names it as an OpenAPI component and
+   supplies field-level examples/descriptions
+2. Add a matching response schema (a plain Zod schema is enough — it doesn't need to be the same
+   one used elsewhere, just describe the actual response shape) and register the path with
+   `registry.registerPath(...)` in `src/docs/openapi.ts`, covering every status code the endpoint
+   can actually return
+
+`/api/docs` is mounted with a relaxed CSP (`script-src 'unsafe-inline'`, scoped to just that
+route in `app.ts`) since Swagger UI's HTML ships an inline bootstrap script that the global
+`helmet()` CSP would otherwise block in the browser — every other route keeps the strict default.
 
 ## Deployment
 
@@ -93,7 +116,8 @@ src/
   controllers/  request handlers (route -> service glue)
   services/     business logic, DB access
   middleware/   auth, RBAC/ownership, validation, error handling
-  validators/   Zod schemas per resource
+  validators/   Zod schemas per resource (also drive the OpenAPI spec via .meta())
+  docs/         OpenAPI document generator, served at /api/docs (see "API documentation" above)
   lib/          Auth0 helpers, JST date/time
   types/        shared TS types, Express Request augmentation
   generated/    Prisma Client output (gitignored — regenerate with `yarn prisma generate`)
@@ -104,5 +128,5 @@ prisma/
   migrate-admin-users.ts  one-time legacy admin_users -> users migration (already run)
 ```
 
-See [`docs/API.md`](docs/API.md) for the full endpoint-by-endpoint reference, RBAC rules, and
-request/response shapes.
+See the [API documentation](#api-documentation) section above for the full endpoint-by-endpoint
+reference — RBAC rules and multi-endpoint resources will be added there as they're built.
