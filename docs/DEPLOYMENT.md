@@ -21,8 +21,11 @@ has no way to know a *runtime* filesystem lookup like that needs those files, so
 they're silently missing from the deployed function, and `express.static` falls through to
 Swagger UI's catch-all HTML handler for every asset request (same response body for the CSS, the
 JS, and the docs page itself — a confusing failure mode if you don't know to look for it).
-`vercel.json`'s `functions.includeFiles` forces Vercel to bundle that directory anyway. This is
-also why the issue is invisible in local dev (`yarn dev` reads the real filesystem directly,
+`vercel.json`'s `functions.includeFiles` forces Vercel to bundle the specific files Swagger UI's
+HTML actually references (not the whole `swagger-ui-dist` package — it ships extra bundle
+variants and source maps we don't need). If a future Swagger UI upgrade changes which files its
+generated HTML links to, update that glob to match. This is also why the issue is invisible in
+local dev (`yarn dev` reads the real filesystem directly,
 bypassing Vercel's bundler entirely) — it only ever shows up on an actual deployment.
 
 ## One-time setup (do this in the Vercel dashboard — needs your account)
