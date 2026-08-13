@@ -28,9 +28,21 @@ app.get('/', (_req, res) => {
   <body style="font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; line-height: 1.6;">
     <h1>jdm_experience_backend</h1>
     <p>Node.js/TypeScript REST API for the JDM Experience tour/reservation platform.</p>
-    <p><a href="/api/docs">API documentation</a> &middot; <a href="/api/health">health check</a></p>
+    <p><a href="/api/docs/">API documentation</a> &middot; <a href="/api/health">health check</a></p>
   </body>
 </html>`)
+})
+
+// swagger-ui-express has no built-in trailing-slash redirect: its HTML uses
+// relative asset paths (./swagger-ui.css), which only resolve correctly when
+// the browser's address bar already ends in "/docs/" — without the slash,
+// "./swagger-ui.css" resolves to "/api/swagger-ui.css" (dropping "docs"),
+// 404s, and Swagger UI fails to load. Force it before the mount below.
+// A RegExp route (not a string pattern) is required here: Express's default
+// loose routing treats string pattern '/api/docs' as matching '/api/docs/'
+// too, which would redirect the already-correct URL right back to itself.
+app.get(/^\/api\/docs$/, (_req, res) => {
+  res.redirect(301, '/api/docs/')
 })
 
 // Under /api/* so vercel.json's rewrite routes it to this same function —
