@@ -14,6 +14,17 @@ Prisma note: this project uses Prisma's driver-adapter mode (`@prisma/adapter-pg
 native query-engine binary to worry about getting right for Vercel's Lambda OS — the usual
 Prisma-on-Vercel `binaryTargets` headache doesn't apply here.
 
+Swagger UI note: `/api/docs` serves static assets (`swagger-ui.css`, `swagger-ui-bundle.js`, ...)
+via `express.static()` reading `node_modules/swagger-ui-dist` off disk at request time. Vercel's
+function bundler only includes files it can trace from actual `import`/`require` statements — it
+has no way to know a *runtime* filesystem lookup like that needs those files, so without help
+they're silently missing from the deployed function, and `express.static` falls through to
+Swagger UI's catch-all HTML handler for every asset request (same response body for the CSS, the
+JS, and the docs page itself — a confusing failure mode if you don't know to look for it).
+`vercel.json`'s `functions.includeFiles` forces Vercel to bundle that directory anyway. This is
+also why the issue is invisible in local dev (`yarn dev` reads the real filesystem directly,
+bypassing Vercel's bundler entirely) — it only ever shows up on an actual deployment.
+
 ## One-time setup (do this in the Vercel dashboard — needs your account)
 
 1. **Import the repo**: Vercel dashboard -> Add New -> Project -> import
