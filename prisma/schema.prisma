@@ -48,17 +48,253 @@ enum Role {
 // also be pre-provisioned (e.g. migrated from another system) before anyone
 // has actually logged in — it gets linked by matching email on first login.
 model User {
-  userId    Int      @id @default(autoincrement()) @map("user_id")
-  auth0Sub  String?  @unique @map("auth0_sub")
-  email     String   @unique
-  fullName  String?  @map("full_name")
+  userId        Int            @id @default(autoincrement()) @map("user_id")
+  auth0Sub      String?        @unique @map("auth0_sub")
+  email         String         @unique
+  fullName      String?        @map("full_name")
   /// Historical reference only (carried over from a legacy migration) — never used by auth
   /// logic, which matches by email/auth0Sub only.
-  username  String?  @unique
-  role      Role     @default(CUSTOMER)
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  username      String?        @unique
+  role          Role           @default(CUSTOMER)
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  customer      Customer?
+  tourGuide     TourGuide?
+  bookings      Booking[]
+  paymentProofs PaymentProof[]
+  auditLogs     AuditLog[]
 
   @@map("users")
+}
+
+enum TourStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ContactMessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+}
+
+/// Guide-specific profile extension for TOUR_GUIDE users. Identity/login lives on `User`.
+model TourGuide {
+  id     Int     @id @default(autoincrement())
+  userId Int     @unique @map("user_id")
+  phone  String?
+  bio    String?
+  active Boolean @default(true)
+  user   User    @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tours  Tour[]
+
+  @@map("tour_guides")
+}
+
+model Tour {
+  id           Int                @id @default(autoincrement())
+  name         String
+  slug         String             @unique
+  description  String?
+  price        Decimal            @db.Decimal(10, 2)
+  currency     String             @default("JPY") @db.VarChar(3)
+  status       TourStatus         @default(ACTIVE)
+  capacity     Int                @default(1)
+  guideId      Int?               @map("guide_id")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  guide        TourGuide?         @relation(fields: [guideId], references: [id], onDelete: Restrict)
+  images       TourImage[]
+  availability TourAvailability[]
+  bookings     Booking[]
+
+  @@index([guideId])
+  @@index([status])
+  @@map("tours")
+}
+
+/// Metadata only — the actual file lives in object storage, never the database.
+model TourImage {
+  id        Int    @id @default(autoincrement())
+  tourId    Int    @map("tour_id")
+  imageUrl  String @map("image_url")
+  sortOrder Int    @default(0) @map("sort_order")
+  tour      Tour   @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@index([tourId])
+  @@map("tour_images")
+}
+
+model TourAvailability {
+  id             Int       @id @default(autoincrement())
+  tourId         Int       @map("tour_id")
+  startDatetime  DateTime  @map("start_datetime")
+  spotsRemaining Int       @map("spots_remaining")
+  tour           Tour      @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  bookings       Booking[]
+
+  @@index([tourId])
+  @@map("tour_availability")
+}
+
+/// Travel-profile extension for CUSTOMER users. Identity/login lives on `User`.
+model Customer {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique @map("user_id")
+  phone          String?
+  nationality    String?
+  passportNumber String?  @map("passport_number")
+  licenseNumber  String?  @map("license_number")
+  licenseCountry String?  @map("license_country")
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+model Booking {
+  id                Int               @id @default(autoincrement())
+  userId            Int               @map("user_id")
+  tourId            Int               @map("tour_id")
+  availabilityId    Int?              @map("availability_id")
+  bookingDate       DateTime          @db.Date @map("booking_date")
+  participants      Int               @default(1)
+  status            BookingStatus     @default(PENDING)
+  totalPrice        Decimal           @db.Decimal(10, 2) @map("total_price")
+  depositPaid       Decimal           @default(0.00) @db.Decimal(10, 2) @map("deposit_paid")
+  paymentStatus     PaymentStatus     @default(UNPAID) @map("payment_status")
+  tourNameSnapshot  String            @map("tour_name_snapshot")
+  unitPriceSnapshot Decimal           @db.Decimal(10, 2) @map("unit_price_snapshot")
+  currency          String            @default("JPY") @db.VarChar(3)
+  specialRequests   String?           @map("special_requests")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  user              User              @relation(fields: [userId], references: [userId], onUpdate: Restrict)
+  tour              Tour              @relation(fields: [tourId], references: [id], onUpdate: Restrict)
+  availability      TourAvailability? @relation(fields: [availabilityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payments          Payment[]
+  paymentProofs     PaymentProof[]
+
+  @@index([userId])
+  @@index([tourId])
+  @@index([availabilityId])
+  @@index([status])
+  @@map("bookings")
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  bookingId      Int           @map("booking_id")
+  provider       String?
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("JPY") @db.VarChar(3)
+  status         PaymentStatus @default(UNPAID)
+  paymentMethod  String?       @map("payment_method")
+  paymentDate    DateTime      @default(now()) @map("payment_date")
+  paidAt         DateTime?     @map("paid_at")
+  transactionRef String?       @map("transaction_ref")
+  booking        Booking       @relation(fields: [bookingId], references: [id], onUpdate: Restrict)
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("payments")
+}
+
+/// Metadata only — the actual file lives in object storage, never the database.
+model PaymentProof {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int      @map("booking_id")
+  uploadedBy Int      @map("uploaded_by")
+  fileUrl    String   @map("file_url")
+  fileName   String   @map("file_name")
+  fileType   String   @map("file_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  uploader   User     @relation(fields: [uploadedBy], references: [userId])
+
+  @@index([bookingId])
+  @@map("payment_proofs")
+}
+
+model ContactMessage {
+  id        Int                  @id @default(autoincrement())
+  name      String?
+  email     String?
+  subject   String?
+  message   String?
+  status    ContactMessageStatus @default(NEW)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("contact_messages")
+}
+
+model AppSettings {
+  id                Int      @id
+  locationName      String   @default("Tokyo, Japan") @map("location_name")
+  latitude          Decimal  @db.Decimal(9, 6)
+  longitude         Decimal  @db.Decimal(9, 6)
+  address           String?
+  timezone          String?  @default("Asia/Tokyo")
+  contactEmail      String?  @map("contact_email")
+  contactPhone      String?  @map("contact_phone")
+  contactHours      String?  @map("contact_hours")
+  bookingCutoffHour Int      @default(17) @map("booking_cutoff_hour")
+  updatedAt         DateTime @default(now()) @map("updated_at")
+
+  @@map("app_settings")
+}
+
+model SocialMediaLink {
+  id           Int            @id @default(autoincrement())
+  platform     SocialPlatform @unique
+  url          String
+  enabled      Boolean        @default(true)
+  displayOrder Int            @default(0) @map("display_order")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@index([enabled])
+  @@map("social_media_links")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  entity    String
+  entityId  Int?     @map("entity_id")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }
