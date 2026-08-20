@@ -66,7 +66,11 @@ Requires `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `.env`, matching the frontend's
 verified token to a `User` row (JIT provisioning) is a separate, later concern.
 
 An `UnauthorizedError` thrown by `checkJwt` (missing/invalid/expired token) is caught by the error
-handler in `app.ts` and returned as `401` with the error's message.
+handler in `app.ts` and returned as `401` (`{ success: false, message: ... }`).
+
+`GET /api/auth/ping` applies `checkJwt` and echoes back the verified token's `sub` claim — a
+minimal diagnostic proving the middleware is wired end to end. Not meant to stick around once
+real protected routes exist.
 
 ## Deployment
 

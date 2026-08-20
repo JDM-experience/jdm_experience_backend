@@ -65,13 +65,15 @@ app.use(
 
 app.use('/api', routes)
 
+// express-oauth2-jwt-bearer forwards token failures here via next(err). Shape matches
+// jdm_experience_frontend's httpClient, which extracts body.message from a failed response.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof UnauthorizedError) {
-    res.status(err.status).json({ error: err.message })
+    res.status(err.status).json({ success: false, message: err.message })
     return
   }
   console.error(err)
-  res.status(500).json({ error: 'Internal server error' })
+  res.status(500).json({ success: false, message: 'Internal server error' })
 })
 
 export default app
