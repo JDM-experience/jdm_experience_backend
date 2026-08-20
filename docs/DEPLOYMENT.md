@@ -50,8 +50,9 @@ bypassing Vercel's bundler entirely) — it only ever shows up on an actual depl
      frontend's corresponding deployment URL, or `localhost:5173` if there isn't one yet.
    - `NODE_ENV` — `production` for both (this is the Node runtime mode, unrelated to which
      Supabase project is in use)
-   - Auth0 vars, once that integration exists (not yet — see `README.md`) — will likely need
-     separate PROD/DEV Auth0 applications too
+   - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — see `README.md`'s "Authentication (Auth0)" section.
+     Use separate PROD/DEV Auth0 applications so a token issued for one environment can't
+     authenticate against the other.
 
    Any other PR/preview branch that isn't `development` should also default to the DEV project's
    values (never PROD) — set those as the general Preview-environment fallback so a stray PR

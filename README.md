@@ -52,6 +52,22 @@ That's it — no separate step in `openapi.ts` itself.
 route in `app.ts`) since Swagger UI's HTML ships an inline bootstrap script that the global
 `helmet()` CSP would otherwise block in the browser — every other route keeps the strict default.
 
+## Authentication (Auth0)
+
+Protected routes use `checkJwt` (`src/middleware/auth.middleware.ts`), which verifies an
+Auth0-issued bearer access token's signature, issuer, audience, and expiry against the tenant's
+JWKS (via `express-oauth2-jwt-bearer` — no manual `jsonwebtoken`/JWKS plumbing). On success it
+populates `req.auth.payload` with the token's decoded claims (`sub`, etc.).
+
+Requires `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `.env`, matching the frontend's
+`VITE_AUTH0_DOMAIN`/`VITE_AUTH0_AUDIENCE` exactly (see `.env.example`).
+
+`checkJwt` only verifies the token — it doesn't look up or attach a local user record. Linking a
+verified token to a `User` row (JIT provisioning) is a separate, later concern.
+
+An `UnauthorizedError` thrown by `checkJwt` (missing/invalid/expired token) is caught by the error
+handler in `app.ts` and returned as `401` with the error's message.
+
 ## Deployment
 
 **Production**: https://jdm-experience-backend-one.vercel.app/
