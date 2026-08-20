@@ -30,3 +30,35 @@ model Client {
 
   @@map("clients")
 }
+
+// SUPER_ADMIN/ADMIN/TOUR_GUIDE ship with the eventual RBAC work in mind (see
+// jdm_experience_backend's sandbox implementation); every identity created
+// through Auth0 today defaults to CUSTOMER.
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  TOUR_GUIDE
+  CUSTOMER
+}
+
+// Auth0 is the sole identity provider — there is no local password. A row is
+// created on a user's first successful Auth0 login (see findOrCreateFromAuth0
+// in src/services/user.service.ts); auth0Sub is Auth0's stable subject
+// identifier (e.g. "auth0|..." or "google-oauth2|..."). Nullable: a row can
+// also be pre-provisioned (e.g. migrated from another system) before anyone
+// has actually logged in — it gets linked by matching email on first login.
+model User {
+  userId    Int      @id @default(autoincrement()) @map("user_id")
+  auth0Sub  String?  @unique @map("auth0_sub")
+  email     String   @unique
+  fullName  String?  @map("full_name")
+  /// Historical reference only (carried over from a legacy migration) — never used by auth
+  /// logic, which matches by email/auth0Sub only.
+  username  String?  @unique
+  role      Role     @default(CUSTOMER)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
