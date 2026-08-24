@@ -3,7 +3,7 @@ import express from 'express'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import swaggerUi from 'swagger-ui-express'
-import { UnauthorizedError } from 'express-oauth2-jwt-bearer'
+import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { openApiDocument } from './docs/openapi'
 import routes from './routes'
 
@@ -65,15 +65,7 @@ app.use(
 
 app.use('/api', routes)
 
-// express-oauth2-jwt-bearer forwards token failures here via next(err). Shape matches
-// jdm_experience_frontend's httpClient, which extracts body.message from a failed response.
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  if (err instanceof UnauthorizedError) {
-    res.status(err.status).json({ success: false, message: err.message })
-    return
-  }
-  console.error(err)
-  res.status(500).json({ success: false, message: 'Internal server error' })
-})
+app.use('/api', notFoundHandler)
+app.use(errorHandler)
 
 export default app
