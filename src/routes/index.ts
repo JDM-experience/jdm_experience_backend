@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authRoutes } from './auth.routes'
 import { clientRoutes } from './client.routes'
+import { contactMessagesRoutes } from './contactMessages.routes'
 import { healthRoutes } from './health.routes'
 import type { RouteDefinition } from './route-definition'
 import { settingsRoutes } from './settings.routes'
@@ -15,6 +16,7 @@ export const allRoutes: RouteDefinition[] = [
   ...authRoutes,
   ...usersRoutes,
   ...settingsRoutes,
+  ...contactMessagesRoutes,
 ]
 
 const router = Router()
