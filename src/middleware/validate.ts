@@ -27,7 +27,10 @@ export function validateQuery(schema: ZodType): RequestHandler {
       next(new ApiError(422, message))
       return
     }
-    req.query = result.data as typeof req.query
+    // Express 5's req.query is a getter-only accessor (lazily parsed from the URL) -- plain
+    // assignment throws "Cannot set property query of #<IncomingMessage> which has only a
+    // getter" at runtime even though it type-checks. Redefine the property instead.
+    Object.defineProperty(req, 'query', { value: result.data, writable: true, configurable: true, enumerable: true })
     next()
   }
 }

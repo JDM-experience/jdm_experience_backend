@@ -5,6 +5,7 @@ import { contactMessagesRoutes } from './contactMessages.routes'
 import { healthRoutes } from './health.routes'
 import type { RouteDefinition } from './route-definition'
 import { settingsRoutes } from './settings.routes'
+import { toursRoutes } from './tours.routes'
 import { usersRoutes } from './users.routes'
 
 // The single source of truth for every route — both the Express router below
@@ -17,6 +18,7 @@ export const allRoutes: RouteDefinition[] = [
   ...usersRoutes,
   ...settingsRoutes,
   ...contactMessagesRoutes,
+  ...toursRoutes,
 ]
 
 const router = Router()
