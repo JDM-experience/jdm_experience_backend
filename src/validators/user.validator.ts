@@ -18,6 +18,7 @@ export const updateUserSchema = z
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
 export const userIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+export const userListQuerySchema = z.object({ role: roleEnum.optional() })
 
 const userSchema = z
   .object({

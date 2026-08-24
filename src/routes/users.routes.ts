@@ -1,12 +1,13 @@
 import { create, getOne, list, remove, update } from '../controllers/user.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac'
-import { validateBody } from '../middleware/validate'
+import { validateBody, validateQuery } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
 import {
   createUserSchema,
   deactivateUserResponseSchema,
   updateUserSchema,
+  userListQuerySchema,
   userResponseSchema,
   usersListResponseSchema,
 } from '../validators/user.validator'
@@ -18,12 +19,14 @@ export const usersRoutes: RouteDefinition[] = [
   {
     method: 'get',
     path: '/users',
-    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), list],
-    summary: 'List all users',
+    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), validateQuery(userListQuerySchema), list],
+    summary: 'List users, optionally filtered by role',
+    request: { query: userListQuerySchema },
     responses: {
-      200: { description: 'All users.', schema: usersListResponseSchema },
+      200: { description: 'Users, optionally filtered by ?role=.', schema: usersListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
+      422: { description: 'Invalid role filter.', schema: apiErrorResponseSchema },
     },
   },
   {

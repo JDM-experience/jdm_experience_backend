@@ -28,8 +28,8 @@ export async function findOrCreateFromAuth0(identity: { sub: string; email: stri
 
 type Actor = { userId: number; role: Role }
 
-export async function listUsers(): Promise<PublicUser[]> {
-  const users = await prisma.user.findMany({ orderBy: { userId: 'asc' } })
+export async function listUsers(filter?: { role?: Role }): Promise<PublicUser[]> {
+  const users = await prisma.user.findMany({ where: filter?.role ? { role: filter.role } : undefined, orderBy: { userId: 'asc' } })
   return users.map(toPublicUser)
 }
 

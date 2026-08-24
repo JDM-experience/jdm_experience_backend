@@ -3,6 +3,7 @@ import { authRoutes } from './auth.routes'
 import { bookingsRoutes } from './bookings.routes'
 import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
+import { customersRoutes } from './customers.routes'
 import { healthRoutes } from './health.routes'
 import { paymentsRoutes } from './payments.routes'
 import type { RouteDefinition } from './route-definition'
@@ -23,6 +24,7 @@ export const allRoutes: RouteDefinition[] = [
   ...toursRoutes,
   ...bookingsRoutes,
   ...paymentsRoutes,
+  ...customersRoutes,
 ]
 
 const router = Router()

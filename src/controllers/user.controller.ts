@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as userService from '../services/user.service'
 import { userIdParamSchema } from '../validators/user.validator'
+import type { Role } from '../generated/prisma/client'
 
 function parseUserId(req: Request): number {
   const parsed = userIdParamSchema.safeParse(req.params)
@@ -11,7 +12,8 @@ function parseUserId(req: Request): number {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json({ success: true, data: await userService.listUsers() })
+    const role = req.query.role as Role | undefined
+    res.json({ success: true, data: await userService.listUsers(role ? { role } : undefined) })
   } catch (error) {
     next(error)
   }
