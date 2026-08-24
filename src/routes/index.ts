@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import { authRoutes } from './auth.routes'
+import { bookingsRoutes } from './bookings.routes'
 import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
 import { healthRoutes } from './health.routes'
+import { paymentsRoutes } from './payments.routes'
 import type { RouteDefinition } from './route-definition'
 import { settingsRoutes } from './settings.routes'
 import { toursRoutes } from './tours.routes'
@@ -19,6 +21,8 @@ export const allRoutes: RouteDefinition[] = [
   ...settingsRoutes,
   ...contactMessagesRoutes,
   ...toursRoutes,
+  ...bookingsRoutes,
+  ...paymentsRoutes,
 ]
 
 const router = Router()
