@@ -103,6 +103,10 @@ const tourSchema = z
   })
   .meta({ id: 'Tour' })
 
+export const tourGuidesListResponseSchema = z
+  .object({ success: z.literal(true), data: z.array(tourGuideSchema) })
+  .meta({ id: 'TourGuidesListResponse' })
+
 export const tourResponseSchema = z.object({ success: z.literal(true), data: tourSchema }).meta({ id: 'TourResponse' })
 export const toursListResponseSchema = z
   .object({ success: z.literal(true), data: z.array(tourSchema) })

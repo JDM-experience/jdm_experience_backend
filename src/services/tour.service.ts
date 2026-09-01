@@ -73,6 +73,23 @@ async function guideIdForUser(userId: number): Promise<number | null> {
   return guide?.id ?? null
 }
 
+/** For the Tour Guide assignment selector on Create/Edit Tour (staff-only). */
+export async function listTourGuides() {
+  const guides = await prisma.tourGuide.findMany({
+    where: { active: true },
+    include: { user: true },
+    orderBy: { id: 'asc' },
+  })
+  return guides.map((g) => ({
+    id: g.id,
+    userId: g.userId,
+    fullName: g.user.fullName,
+    email: g.user.email,
+    phone: g.phone,
+    bio: g.bio,
+  }))
+}
+
 export async function createTour(
   actor: Actor,
   input: {
