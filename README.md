@@ -2,21 +2,22 @@
 
 Node.js/TypeScript REST API for the JDM Experience tour/reservation platform, with role-based
 access control (SUPER_ADMIN/ADMIN/TOUR_GUIDE/CUSTOMER), PostgreSQL (Supabase) via Prisma, and
-Auth0 for authentication. Full endpoint reference: [`docs/API.md`](docs/API.md).
+Auth0 for authentication. Full endpoint reference: interactive docs at `/api/docs`
+(http://localhost:3000/api/docs locally, or https://jdm-experience-backend-one.vercel.app/api/docs
+in production) — see [API documentation](#api-documentation) below for how it's generated.
 
 The React frontend ([`jdm_experience_frontend`](https://github.com/achilleslucas79-bot/jdm_experience_frontend))
 originally specified an earlier endpoint shape in its own `docs/BACKEND_REQUIREMENTS.md` — this
-project implements the newer RBAC/tours/bookings architecture described in `docs/API.md` instead
-(see that doc's intro for how the two relate).
+project implements the newer RBAC/tours/bookings architecture instead.
 
 ## Setup
 
-Yarn is the enforced package manager (see `package.json`'s `packageManager` field and
-`preinstall` guard) — `npm install`/`pnpm install` will refuse to run.
+Yarn is the enforced package manager (see `package.json`'s `preinstall` guard) —
+`npm install`/`pnpm install` will refuse to run.
 
 ```bash
 yarn install
-cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and any secrets you have
+cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and AUTH0_DOMAIN/AUTH0_AUDIENCE
 yarn prisma generate
 yarn prisma db push    # sync schema.prisma to the database
 yarn dev
@@ -24,7 +25,71 @@ yarn dev
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
 
+## API documentation
+
+Interactive Swagger UI at `/api/docs` (local: http://localhost:3000/api/docs, production:
+https://jdm-experience-backend-one.vercel.app/api/docs) — documents every endpoint's request/
+response shape and status codes, and lets you try requests directly from the browser.
+
+The spec is generated from the same `RouteDefinition[]` arrays that build the actual Express
+router (`src/routes/*.routes.ts`, combined in `src/routes/index.ts`) — a route only gets defined
+once, so the docs and the router can't drift out of sync with each other. `src/docs/openapi.ts`
+just loops over that same array and registers each entry with `@asteasolutions/zod-to-openapi`.
+
+To add a new endpoint (see `client.routes.ts` for the pattern):
+
+1. Add `.meta({ id: '...', ... })` to its request/response Zod schemas in `src/validators/` —
+   this names them as OpenAPI components and supplies field-level examples/descriptions
+2. Add one entry to the resource's `RouteDefinition[]` array (method, path, handler, `request`
+   params/query/body schemas, and a `responses` map covering every status code the endpoint can
+   actually return)
+3. Export that array from `src/routes/<resource>.routes.ts` and spread it into `allRoutes` in
+   `src/routes/index.ts`
+
+That's it — no separate step in `openapi.ts` itself.
+
+`/api/docs` is mounted with a relaxed CSP (`script-src 'unsafe-inline'`, scoped to just that
+route in `app.ts`) since Swagger UI's HTML ships an inline bootstrap script that the global
+`helmet()` CSP would otherwise block in the browser — every other route keeps the strict default.
+
+## Authentication (Auth0)
+
+Auth0 Universal Login is the sole identity provider — there is no local password. The frontend
+sends an Auth0-issued access token as `Authorization: Bearer <token>`. `checkJwt`
+(`src/middleware/auth.middleware.ts`) verifies it against the tenant's JWKS via
+`express-oauth2-jwt-bearer`, populating `req.auth.payload` with the decoded claims (`sub`, etc.).
+`requireAuth` builds on `checkJwt`: it also reads a custom email claim and finds-or-creates the
+local `users` row (`src/services/user.service.ts`), rejecting deactivated accounts.
+
+Requires `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `.env`, matching the frontend's
+`VITE_AUTH0_DOMAIN`/`VITE_AUTH0_AUDIENCE` exactly (see `.env.example`).
+
+Auth0 access tokens don't include email by default, so a **Post-Login Action** must stamp it on as
+a namespaced custom claim. In the Auth0 dashboard, under **Actions → Library → Build Custom**
+(trigger: Login / Post Login):
+
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  const namespace = 'https://jdmexperience.dev'
+  api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email)
+}
+```
+
+Deploy it and drag it into **Actions → Flows → Login**. Without this, `requireAuth` 401s every
+request with a message naming exactly this. The dashboard's Allowed Callback/Logout URLs and Web
+Origins must also include the frontend's origin.
+
+An `UnauthorizedError` (missing/invalid/expired token) is caught by the error handler in `app.ts`
+and returned as `401` (`{ success: false, message: ... }`).
+
+`GET /api/auth/ping` applies just `checkJwt` and echoes back the verified token's `sub` claim — a
+minimal diagnostic proving the middleware is wired end to end, no user lookup. `GET /api/auth/me`
+(requires `requireAuth`) returns the authenticated user's local profile — see `/api/docs` for the
+full shape.
+
 ## Deployment
+
+**Production**: https://jdm-experience-backend-one.vercel.app/
 
 Deploys to Vercel — `main` auto-deploys to production, PRs get preview URLs. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the one-time dashboard setup (env vars, GitHub
@@ -91,7 +156,8 @@ src/
   controllers/  request handlers (route -> service glue)
   services/     business logic, DB access
   middleware/   auth, RBAC/ownership, validation, error handling
-  validators/   Zod schemas per resource
+  validators/   Zod schemas per resource (also drive the OpenAPI spec via .meta())
+  docs/         OpenAPI document generator, served at /api/docs (see "API documentation" above)
   lib/          Auth0 helpers, JST date/time
   types/        shared TS types, Express Request augmentation
   generated/    Prisma Client output (gitignored — regenerate with `yarn prisma generate`)
@@ -102,5 +168,5 @@ prisma/
   migrate-admin-users.ts  one-time legacy admin_users -> users migration (already run)
 ```
 
-See [`docs/API.md`](docs/API.md) for the full endpoint-by-endpoint reference, RBAC rules, and
-request/response shapes.
+See the [API documentation](#api-documentation) section above for the full endpoint-by-endpoint
+reference — RBAC rules and multi-endpoint resources will be added there as they're built.
