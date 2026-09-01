@@ -32,6 +32,14 @@ export async function myTours(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function listGuides(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await tourService.listTourGuides() })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function getOne(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = parseParams(tourIdParamSchema, req.params)

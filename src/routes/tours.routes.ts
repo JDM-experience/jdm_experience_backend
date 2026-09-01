@@ -5,6 +5,7 @@ import {
   getOne,
   list,
   listAvailability,
+  listGuides,
   myTours,
   remove,
   removeAvailability,
@@ -25,6 +26,7 @@ import {
   deleteTourResponseSchema,
   tourAvailabilityListResponseSchema,
   tourAvailabilityResponseSchema,
+  tourGuidesListResponseSchema,
   tourImageResponseSchema,
   tourListQuerySchema,
   tourResponseSchema,
@@ -55,6 +57,17 @@ export const toursRoutes: RouteDefinition[] = [
       200: { description: "The guide's tours.", schema: toursListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not a TOUR_GUIDE.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'get',
+    path: '/tours/guides',
+    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), listGuides],
+    summary: 'List active tour guides, for the Create/Edit Tour guide-assignment selector',
+    responses: {
+      200: { description: 'Active tour guides.', schema: tourGuidesListResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
     },
   },
   {

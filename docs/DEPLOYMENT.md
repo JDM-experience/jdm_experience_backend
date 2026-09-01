@@ -53,6 +53,9 @@ bypassing Vercel's bundler entirely) — it only ever shows up on an actual depl
    - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — see `README.md`'s "Authentication (Auth0)" section.
      Use separate PROD/DEV Auth0 applications so a token issued for one environment can't
      authenticate against the other.
+   - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_STORAGE_BUCKET` — that project's
+     Storage credentials, for tour-image uploads. See `README.md`'s "File uploads (Supabase
+     Storage)" section — the `tour-images` bucket must be created on each project first.
 
    Any other PR/preview branch that isn't `development` should also default to the DEV project's
    values (never PROD) — set those as the general Preview-environment fallback so a stray PR

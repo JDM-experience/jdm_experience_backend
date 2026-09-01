@@ -22,7 +22,7 @@ function toPublicTour(tour: TourWithRelations) {
     price: Number(tour.price),
     currency: tour.currency,
     status: tour.status,
-    capacity: tour.capacity,
+    seats: tour.seats,
     guide: tour.guide
       ? {
           id: tour.guide.id,
@@ -73,6 +73,23 @@ async function guideIdForUser(userId: number): Promise<number | null> {
   return guide?.id ?? null
 }
 
+/** For the Tour Guide assignment selector on Create/Edit Tour (staff-only). */
+export async function listTourGuides() {
+  const guides = await prisma.tourGuide.findMany({
+    where: { active: true },
+    include: { user: true },
+    orderBy: { id: 'asc' },
+  })
+  return guides.map((g) => ({
+    id: g.id,
+    userId: g.userId,
+    fullName: g.user.fullName,
+    email: g.user.email,
+    phone: g.phone,
+    bio: g.bio,
+  }))
+}
+
 export async function createTour(
   actor: Actor,
   input: {
@@ -82,7 +99,7 @@ export async function createTour(
     price: number
     currency: string
     status: TourStatus
-    capacity: number
+    seats: number
     guideId?: number | null
     images?: { imageUrl: string; sortOrder: number }[]
   },
@@ -106,7 +123,7 @@ export async function createTour(
       price: input.price,
       currency: input.currency,
       status: input.status,
-      capacity: input.capacity,
+      seats: input.seats,
       guideId,
       images: input.images?.length
         ? { create: input.images.map((img) => ({ imageUrl: img.imageUrl, sortOrder: img.sortOrder })) }
@@ -129,7 +146,7 @@ export async function updateTour(
     price?: number
     currency?: string
     status?: TourStatus
-    capacity?: number
+    seats?: number
     guideId?: number | null
   },
 ) {
@@ -151,7 +168,7 @@ export async function updateTour(
       price: input.price,
       currency: input.currency,
       status: input.status,
-      capacity: input.capacity,
+      seats: input.seats,
       guideId: input.guideId,
     },
     include: TOUR_INCLUDE,

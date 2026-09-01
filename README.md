@@ -17,7 +17,8 @@ Yarn is the enforced package manager (see `package.json`'s `preinstall` guard) �
 
 ```bash
 yarn install
-cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and AUTH0_DOMAIN/AUTH0_AUDIENCE
+cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL, AUTH0_DOMAIN/AUTH0_AUDIENCE, and the
+                       # SUPABASE_* vars (see "File uploads" below)
 yarn prisma generate
 yarn prisma db push    # sync schema.prisma to the database
 yarn dev
@@ -132,6 +133,63 @@ booking/contact-message — all fake `seed.*@example.com` accounts, password `Pa
 yarn seed
 ```
 
+## File uploads (Supabase Storage)
+
+Tour images are stored in a Supabase Storage bucket, not the database (`TourImage` holds only the
+URL). The browser uploads the file **directly to Storage** using a short-lived signed URL that
+`POST /api/uploads/tour-images` issues — the file bytes never pass through this API (Vercel caps a
+serverless function body at ~4.5 MB, and there's no reason to proxy them).
+
+Client flow: `POST /api/uploads/tour-images` → `{ signedUrl, publicUrl, ... }` → browser `PUT`s the
+file to `signedUrl` → sends `publicUrl` back as an image on `POST /api/tours` (`images[]`) or
+`POST /api/tours/:tourId/images`.
+
+### Env vars
+
+| Env var | Where to get it | Notes |
+|---|---|---|
+| `SUPABASE_URL` | Project ref → `https://<ref>.supabase.co` (also **Settings → Data API → Project URL**, minus the `/rest/v1/`) | |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Settings → API Keys** — the legacy `service_role` `secret` key, **or** a new **Secret key** (`sb_secret_...`) | Server-only, full access. Never expose to the browser or commit it. Sent as `Authorization: Bearer` + `apikey` to Storage. |
+| `SUPABASE_STORAGE_BUCKET` | Bucket name — defaults to `tour-images` if unset | |
+
+The **publishable** / `anon` key is *not* used here — only the secret key.
+
+### One-time bucket setup (per project — do this for DEV and PROD)
+
+**Dashboard → Storage → New bucket:**
+
+- Name: `tour-images`
+- **Public bucket: ON** — public read serves the CDN URLs without signing; writes still require the
+  signed URL / service key
+- Additional config → File size limit: `5 MB`
+- Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/avif`
+
+Or run this once in **SQL Editor** (same result):
+
+```sql
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('tour-images', 'tour-images', true, 5242880,
+        array['image/jpeg','image/png','image/webp','image/avif'])
+on conflict (id) do nothing;
+```
+
+No RLS policies are needed: the API signs uploads with the service-role key (bypasses RLS) and a
+public bucket serves reads to anyone. Storage already allows all origins, so the browser `PUT`
+works with no CORS config.
+
+### Production checklist
+
+1. Create the `tour-images` bucket on the **PROD** Supabase project (steps above).
+2. In the Vercel project → **Settings → Environment Variables**, add `SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` for the Production environment,
+   pointing at the PROD project. Redeploy.
+3. Verify: `POST /api/uploads/tour-images` with a valid bearer token returns
+   `{ success: true, data: { signedUrl, publicUrl, ... } }`, and a `PUT` of an image to
+   `signedUrl` returns `200`.
+
+Implementation: `src/config/storage.ts` (signing), `src/services/upload.service.ts`,
+`src/routes/uploads.routes.ts`.
+
 ## Scripts
 
 | Script | Purpose |
@@ -151,7 +209,7 @@ api/
 src/
   app.ts        Express app (middleware, routes) — imported by both api/index.ts and server.ts
   server.ts     local dev entry only (app.listen) — not used in the Vercel deployment
-  config/       env loading + typed config, Prisma client
+  config/       env loading + typed config, Prisma client, Supabase Storage signing
   routes/       Express routers, mounted under /api
   controllers/  request handlers (route -> service glue)
   services/     business logic, DB access
