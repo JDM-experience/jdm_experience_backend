@@ -84,6 +84,7 @@ export async function createTour(
     status: TourStatus
     capacity: number
     guideId?: number | null
+    images?: { imageUrl: string; sortOrder: number }[]
   },
 ) {
   // A Tour Guide is always auto-assigned as the owner of a tour they create — never trust a
@@ -107,6 +108,9 @@ export async function createTour(
       status: input.status,
       capacity: input.capacity,
       guideId,
+      images: input.images?.length
+        ? { create: input.images.map((img) => ({ imageUrl: img.imageUrl, sortOrder: img.sortOrder })) }
+        : undefined,
     },
     include: TOUR_INCLUDE,
   })

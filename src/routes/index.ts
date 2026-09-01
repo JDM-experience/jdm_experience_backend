@@ -9,6 +9,7 @@ import { paymentsRoutes } from './payments.routes'
 import type { RouteDefinition } from './route-definition'
 import { settingsRoutes } from './settings.routes'
 import { toursRoutes } from './tours.routes'
+import { uploadsRoutes } from './uploads.routes'
 import { usersRoutes } from './users.routes'
 
 // The single source of truth for every route — both the Express router below
@@ -22,6 +23,7 @@ export const allRoutes: RouteDefinition[] = [
   ...settingsRoutes,
   ...contactMessagesRoutes,
   ...toursRoutes,
+  ...uploadsRoutes,
   ...bookingsRoutes,
   ...paymentsRoutes,
   ...customersRoutes,

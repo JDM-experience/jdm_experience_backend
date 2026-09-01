@@ -3,6 +3,11 @@ import { z } from 'zod'
 const statusEnum = z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'])
 const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
+export const addTourImageSchema = z.object({
+  imageUrl: z.string().trim().min(1).max(500),
+  sortOrder: z.number().int().nonnegative().default(0),
+})
+
 export const createTourSchema = z.object({
   name: z.string().trim().min(1, 'Tour name is required.').max(150),
   slug: z.string().trim().min(1, 'Slug is required.').max(150).regex(slugPattern, 'Slug must be lowercase, alphanumeric, hyphen-separated.'),
@@ -12,6 +17,8 @@ export const createTourSchema = z.object({
   status: statusEnum.default('ACTIVE'),
   capacity: z.number().int().positive().default(1),
   guideId: z.number().int().positive().nullable().optional(),
+  // Optional — attach images (already uploaded via POST /uploads/tour-images) in the same request.
+  images: z.array(addTourImageSchema).max(20).optional(),
 })
 
 export const updateTourSchema = z
@@ -26,11 +33,6 @@ export const updateTourSchema = z
     guideId: z.number().int().positive().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
-
-export const addTourImageSchema = z.object({
-  imageUrl: z.string().trim().min(1).max(500),
-  sortOrder: z.number().int().nonnegative().default(0),
-})
 
 export const createAvailabilitySchema = z.object({
   startDatetime: z.iso.datetime({ offset: true }),
