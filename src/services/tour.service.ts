@@ -22,7 +22,7 @@ function toPublicTour(tour: TourWithRelations) {
     price: Number(tour.price),
     currency: tour.currency,
     status: tour.status,
-    capacity: tour.capacity,
+    seats: tour.seats,
     guide: tour.guide
       ? {
           id: tour.guide.id,
@@ -82,7 +82,7 @@ export async function createTour(
     price: number
     currency: string
     status: TourStatus
-    capacity: number
+    seats: number
     guideId?: number | null
     images?: { imageUrl: string; sortOrder: number }[]
   },
@@ -106,7 +106,7 @@ export async function createTour(
       price: input.price,
       currency: input.currency,
       status: input.status,
-      capacity: input.capacity,
+      seats: input.seats,
       guideId,
       images: input.images?.length
         ? { create: input.images.map((img) => ({ imageUrl: img.imageUrl, sortOrder: img.sortOrder })) }
@@ -129,7 +129,7 @@ export async function updateTour(
     price?: number
     currency?: string
     status?: TourStatus
-    capacity?: number
+    seats?: number
     guideId?: number | null
   },
 ) {
@@ -151,7 +151,7 @@ export async function updateTour(
       price: input.price,
       currency: input.currency,
       status: input.status,
-      capacity: input.capacity,
+      seats: input.seats,
       guideId: input.guideId,
     },
     include: TOUR_INCLUDE,

@@ -15,7 +15,7 @@ export const createTourSchema = z.object({
   price: z.number().positive('Price must be greater than 0.'),
   currency: z.string().trim().length(3).default('JPY'),
   status: statusEnum.default('ACTIVE'),
-  capacity: z.number().int().positive().default(1),
+  seats: z.number().int().positive('Seats must be a whole number greater than 0.').default(1),
   guideId: z.number().int().positive().nullable().optional(),
   // Optional — attach images (already uploaded via POST /uploads/tour-images) in the same request.
   images: z.array(addTourImageSchema).max(20).optional(),
@@ -29,7 +29,7 @@ export const updateTourSchema = z
     price: z.number().positive().optional(),
     currency: z.string().trim().length(3).optional(),
     status: statusEnum.optional(),
-    capacity: z.number().int().positive().optional(),
+    seats: z.number().int().positive('Seats must be a whole number greater than 0.').optional(),
     guideId: z.number().int().positive().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
@@ -94,7 +94,7 @@ const tourSchema = z
     price: z.number().meta({ example: 25000 }),
     currency: z.string().meta({ example: 'JPY' }),
     status: statusEnum.meta({ example: 'ACTIVE' }),
-    capacity: z.number().int().meta({ example: 4 }),
+    seats: z.number().int().meta({ example: 4 }),
     guide: tourGuideSchema.nullable(),
     images: z.array(tourImageSchema),
     availability: z.array(tourAvailabilitySchema),

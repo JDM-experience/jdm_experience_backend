@@ -124,7 +124,7 @@ model Tour {
   price        Decimal            @db.Decimal(10, 2)
   currency     String             @default("JPY") @db.VarChar(3)
   status       TourStatus         @default(ACTIVE)
-  capacity     Int                @default(1)
+  seats        Int                @default(1)
   guideId      Int?               @map("guide_id")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
