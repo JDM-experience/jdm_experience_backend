@@ -17,7 +17,7 @@ Yarn is the enforced package manager (see `package.json`'s `preinstall` guard) �
 
 ```bash
 yarn install
-cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and any secrets you have
+cp .env.example .env   # fill in DATABASE_URL/DIRECT_URL and AUTH0_DOMAIN/AUTH0_AUDIENCE
 yarn prisma generate
 yarn prisma db push    # sync schema.prisma to the database
 yarn dev
@@ -51,6 +51,41 @@ That's it — no separate step in `openapi.ts` itself.
 `/api/docs` is mounted with a relaxed CSP (`script-src 'unsafe-inline'`, scoped to just that
 route in `app.ts`) since Swagger UI's HTML ships an inline bootstrap script that the global
 `helmet()` CSP would otherwise block in the browser — every other route keeps the strict default.
+
+## Authentication (Auth0)
+
+Auth0 Universal Login is the sole identity provider — there is no local password. The frontend
+sends an Auth0-issued access token as `Authorization: Bearer <token>`. `checkJwt`
+(`src/middleware/auth.middleware.ts`) verifies it against the tenant's JWKS via
+`express-oauth2-jwt-bearer`, populating `req.auth.payload` with the decoded claims (`sub`, etc.).
+`requireAuth` builds on `checkJwt`: it also reads a custom email claim and finds-or-creates the
+local `users` row (`src/services/user.service.ts`), rejecting deactivated accounts.
+
+Requires `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` in `.env`, matching the frontend's
+`VITE_AUTH0_DOMAIN`/`VITE_AUTH0_AUDIENCE` exactly (see `.env.example`).
+
+Auth0 access tokens don't include email by default, so a **Post-Login Action** must stamp it on as
+a namespaced custom claim. In the Auth0 dashboard, under **Actions → Library → Build Custom**
+(trigger: Login / Post Login):
+
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  const namespace = 'https://jdmexperience.dev'
+  api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email)
+}
+```
+
+Deploy it and drag it into **Actions → Flows → Login**. Without this, `requireAuth` 401s every
+request with a message naming exactly this. The dashboard's Allowed Callback/Logout URLs and Web
+Origins must also include the frontend's origin.
+
+An `UnauthorizedError` (missing/invalid/expired token) is caught by the error handler in `app.ts`
+and returned as `401` (`{ success: false, message: ... }`).
+
+`GET /api/auth/ping` applies just `checkJwt` and echoes back the verified token's `sub` claim — a
+minimal diagnostic proving the middleware is wired end to end, no user lookup. `GET /api/auth/me`
+(requires `requireAuth`) returns the authenticated user's local profile — see `/api/docs` for the
+full shape.
 
 ## Deployment
 

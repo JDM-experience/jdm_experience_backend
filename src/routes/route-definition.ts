@@ -12,7 +12,9 @@ export interface RouteDefinition {
   method: HttpMethod
   /** Express-style path, e.g. '/client/:id' — relative to the /api mount. */
   path: string
-  handler: RequestHandler
+  /** A single handler, or a middleware chain (e.g. [checkJwt, ping]) — the last entry does the
+   *  actual responding. */
+  handler: RequestHandler | RequestHandler[]
   summary: string
   description?: string
   request?: {

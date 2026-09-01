@@ -1,17 +1,16 @@
-import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import swaggerUi from 'swagger-ui-express'
+import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { openApiDocument } from './docs/openapi'
 import routes from './routes'
 
 const app = express()
 
 app.use(helmet())
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }))
-app.use(cookieParser())
+app.use(cors({ origin: process.env.CORS_ORIGIN }))
 app.use(express.json())
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
@@ -65,5 +64,8 @@ app.use(
 )
 
 app.use('/api', routes)
+
+app.use('/api', notFoundHandler)
+app.use(errorHandler)
 
 export default app
