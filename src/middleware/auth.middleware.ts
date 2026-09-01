@@ -2,6 +2,20 @@ import type { RequestHandler } from 'express'
 import { auth, UnauthorizedError } from 'express-oauth2-jwt-bearer'
 import { findOrCreateFromAuth0 } from '../services/user.service'
 
+// A missing AUTH0_DOMAIN/AUTH0_AUDIENCE doesn't fail here otherwise -- auth() below would
+// silently build issuerBaseURL: "https://undefined/", so every token verification fails with an
+// opaque JWKS-fetch error instead of a clear "this deployment is misconfigured" one. Fail loudly
+// at cold start instead (surfaces immediately in Vercel's function logs).
+if (!process.env.AUTH0_DOMAIN || !process.env.AUTH0_AUDIENCE) {
+  throw new Error(
+    'Missing required environment variable(s): ' +
+      [!process.env.AUTH0_DOMAIN && 'AUTH0_DOMAIN', !process.env.AUTH0_AUDIENCE && 'AUTH0_AUDIENCE']
+        .filter(Boolean)
+        .join(', ') +
+      '. Set these in Vercel -> Project Settings -> Environment Variables -> Production.',
+  )
+}
+
 /**
  * Verifies an Auth0-issued access token's signature, issuer, audience, and expiry against the
  * tenant's JWKS (RS256, no manual jsonwebtoken/JWKS plumbing). On success, populates
