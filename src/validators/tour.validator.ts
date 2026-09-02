@@ -6,6 +6,12 @@ import { z } from 'zod'
 const statusEnum = z.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE', 'UNDER_MAINTENANCE'])
 const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
+// Whitelisted GET /tours sort fields — never pass a client-supplied string into Prisma's
+// `orderBy` directly (see listTours's SORT_FIELD_MAP in tour.service.ts, which maps these to the
+// actual Prisma field).
+const tourSortByEnum = z.enum(['name', 'price', 'seats', 'createdAt', 'status'])
+const sortOrderEnum = z.enum(['asc', 'desc'])
+
 export const addTourImageSchema = z.object({
   imageUrl: z.string().trim().min(1).max(500),
   sortOrder: z.number().int().nonnegative().default(0),
@@ -39,7 +45,18 @@ export const updateTourSchema = z
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
-export const tourListQuerySchema = z.object({ status: statusEnum.optional() })
+export const tourListQuerySchema = z.object({
+  status: statusEnum.optional(),
+  // Empty string behaves like "not provided" — a cleared search box submits `?search=`.
+  search: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  sortBy: tourSortByEnum.optional(),
+  sortOrder: sortOrderEnum.optional(),
+})
 export const tourIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 export const tourChildParamSchema = z.object({ tourId: z.coerce.number().int().positive() })
 export const tourImageParamSchema = z.object({

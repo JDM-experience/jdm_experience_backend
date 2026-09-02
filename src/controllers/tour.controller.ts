@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as tourService from '../services/tour.service'
+import type { TourSortBy } from '../services/tour.service'
 import { tourChildParamSchema, tourIdParamSchema, tourImageParamSchema } from '../validators/tour.validator'
 import type { TourStatus } from '../generated/prisma/client'
 
@@ -12,8 +13,13 @@ function parseParams<T>(schema: { safeParse: (v: unknown) => { success: boolean;
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
+    // req.query was already validated + whitelisted by validateQuery(tourListQuerySchema) — see
+    // tour.validator.ts's tourSortByEnum for the actual sortBy whitelist enforcement.
     const status = req.query.status as TourStatus | undefined
-    res.json({ success: true, data: await tourService.listTours(status ? { status } : undefined) })
+    const search = req.query.search as string | undefined
+    const sortBy = req.query.sortBy as TourSortBy | undefined
+    const sortOrder = req.query.sortOrder as 'asc' | 'desc' | undefined
+    res.json({ success: true, data: await tourService.listTours({ status, search, sortBy, sortOrder }) })
   } catch (error) {
     next(error)
   }

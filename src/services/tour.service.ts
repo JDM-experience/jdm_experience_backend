@@ -38,12 +38,43 @@ function toPublicTour(tour: TourWithRelations) {
   }
 }
 
-export async function listTours(filter?: { status?: TourStatus }) {
-  const tours = await prisma.tour.findMany({
-    where: { isDeleted: false, ...(filter?.status ? { status: filter.status } : {}) },
-    include: TOUR_INCLUDE,
-    orderBy: { id: 'desc' },
-  })
+// Whitelist mapping only — never build `orderBy` from a raw client-supplied field name (see
+// tourSortByEnum in tour.validator.ts, which is what actually constrains req.query.sortBy before
+// it ever reaches here).
+const SORT_FIELD_MAP = {
+  name: 'name',
+  price: 'price',
+  seats: 'seats',
+  createdAt: 'createdAt',
+  status: 'status',
+} as const satisfies Record<string, keyof Prisma.TourOrderByWithRelationInput>
+
+export type TourSortBy = keyof typeof SORT_FIELD_MAP
+
+export async function listTours(filter?: {
+  status?: TourStatus
+  search?: string
+  sortBy?: TourSortBy
+  sortOrder?: 'asc' | 'desc'
+}) {
+  const where: Prisma.TourWhereInput = { isDeleted: false }
+  if (filter?.status) where.status = filter.status
+  if (filter?.search) {
+    // `mode: 'insensitive'` is Postgres-specific (this project's only supported provider — see
+    // schema.prisma) — case-insensitive search across name and description.
+    where.OR = [
+      { name: { contains: filter.search, mode: 'insensitive' } },
+      { description: { contains: filter.search, mode: 'insensitive' } },
+    ]
+  }
+
+  // Unchanged default (id desc) when no sort is requested, so callers that don't ask for a
+  // specific order (e.g. the admin Tours table) see exactly the same ordering as before.
+  const orderBy: Prisma.TourOrderByWithRelationInput = filter?.sortBy
+    ? { [SORT_FIELD_MAP[filter.sortBy]]: filter.sortOrder ?? 'asc' }
+    : { id: 'desc' }
+
+  const tours = await prisma.tour.findMany({ where, include: TOUR_INCLUDE, orderBy })
   return tours.map(toPublicTour)
 }
 
