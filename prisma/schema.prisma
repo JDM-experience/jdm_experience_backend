@@ -68,10 +68,11 @@ model User {
   @@map("users")
 }
 
-// Tour-level operational state (NOT per-date — date/time bookability is a separate concern
-// handled entirely by TourAvailability + Booking). A new tour always starts PENDING; only an
-// explicit admin confirmation (POST /tours/:id/confirm) moves it to AVAILABLE. From there, staff
-// can move it manually between AVAILABLE/UNAVAILABLE/UNDER_MAINTENANCE. See tour.service.ts.
+// Tour-level operational state (NOT per-date — per-date bookability is just "does a CONFIRMED
+// Booking already exist for this tourId+bookingDate", see booking.service.ts; there's no separate
+// availability/slot table). A new tour always starts PENDING; only an explicit admin confirmation
+// (POST /tours/:id/confirm) moves it to AVAILABLE. From there, staff can move it manually between
+// AVAILABLE/UNAVAILABLE/UNDER_MAINTENANCE. See tour.service.ts.
 enum TourStatus {
   PENDING
   AVAILABLE
@@ -121,26 +122,25 @@ model TourGuide {
 }
 
 model Tour {
-  id           Int                @id @default(autoincrement())
-  name         String
-  slug         String             @unique
-  description  String?
-  price        Decimal            @db.Decimal(10, 2)
-  currency     String             @default("JPY") @db.VarChar(3)
-  status       TourStatus         @default(PENDING)
-  seats        Int                @default(1)
-  guideId      Int?               @map("guide_id")
+  id          Int         @id @default(autoincrement())
+  name        String
+  slug        String      @unique
+  description String?
+  price       Decimal     @db.Decimal(10, 2)
+  currency    String      @default("JPY") @db.VarChar(3)
+  status      TourStatus  @default(PENDING)
+  seats       Int         @default(1)
+  guideId     Int?        @map("guide_id")
   /// Soft-delete marker, independent of `status` — status is purely the 4 operational values
   /// above; deletion is a separate axis so a deleted tour's last known status is never lost.
   /// Preserves related Bookings/Payments (never hard-deleted — see deleteTour in tour.service.ts).
-  isDeleted    Boolean            @default(false) @map("is_deleted")
-  deletedAt    DateTime?          @map("deleted_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
-  guide        TourGuide?         @relation(fields: [guideId], references: [id], onDelete: Restrict)
-  images       TourImage[]
-  availability TourAvailability[]
-  bookings     Booking[]
+  isDeleted   Boolean     @default(false) @map("is_deleted")
+  deletedAt   DateTime?   @map("deleted_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  guide       TourGuide?  @relation(fields: [guideId], references: [id], onDelete: Restrict)
+  images      TourImage[]
+  bookings    Booking[]
 
   @@index([guideId])
   @@index([status])
@@ -160,18 +160,6 @@ model TourImage {
   @@map("tour_images")
 }
 
-model TourAvailability {
-  id             Int       @id @default(autoincrement())
-  tourId         Int       @map("tour_id")
-  startDatetime  DateTime  @map("start_datetime")
-  spotsRemaining Int       @map("spots_remaining")
-  tour           Tour      @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  bookings       Booking[]
-
-  @@index([tourId])
-  @@map("tour_availability")
-}
-
 /// Travel-profile extension for CUSTOMER users. Identity/login lives on `User`.
 model Customer {
   id             Int      @id @default(autoincrement())
@@ -188,32 +176,35 @@ model Customer {
   @@map("customers")
 }
 
+// A tour-date is exclusive to at most one CONFIRMED booking at a time (like reserving the whole
+// vehicle for that day, not a seat within it) — enforced in booking.service.ts (createBooking and
+// updateBookingStatus both check for a conflicting CONFIRMED booking on the same tourId+bookingDate
+// before allowing one). `participants` is only a display/capacity-cap concept against Tour.seats,
+// never a shared pool split across multiple bookings on the same date.
 model Booking {
-  id                Int               @id @default(autoincrement())
-  userId            Int               @map("user_id")
-  tourId            Int               @map("tour_id")
-  availabilityId    Int?              @map("availability_id")
-  bookingDate       DateTime          @db.Date @map("booking_date")
-  participants      Int               @default(1)
-  status            BookingStatus     @default(PENDING)
-  totalPrice        Decimal           @db.Decimal(10, 2) @map("total_price")
-  depositPaid       Decimal           @default(0.00) @db.Decimal(10, 2) @map("deposit_paid")
-  paymentStatus     PaymentStatus     @default(UNPAID) @map("payment_status")
-  tourNameSnapshot  String            @map("tour_name_snapshot")
-  unitPriceSnapshot Decimal           @db.Decimal(10, 2) @map("unit_price_snapshot")
-  currency          String            @default("JPY") @db.VarChar(3)
-  specialRequests   String?           @map("special_requests")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  user              User              @relation(fields: [userId], references: [userId], onUpdate: Restrict)
-  tour              Tour              @relation(fields: [tourId], references: [id], onUpdate: Restrict)
-  availability      TourAvailability? @relation(fields: [availabilityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  id                Int            @id @default(autoincrement())
+  userId            Int            @map("user_id")
+  tourId            Int            @map("tour_id")
+  bookingDate       DateTime       @map("booking_date") @db.Date
+  participants      Int            @default(1)
+  status            BookingStatus  @default(PENDING)
+  totalPrice        Decimal        @map("total_price") @db.Decimal(10, 2)
+  depositPaid       Decimal        @default(0.00) @map("deposit_paid") @db.Decimal(10, 2)
+  paymentStatus     PaymentStatus  @default(UNPAID) @map("payment_status")
+  tourNameSnapshot  String         @map("tour_name_snapshot")
+  unitPriceSnapshot Decimal        @map("unit_price_snapshot") @db.Decimal(10, 2)
+  currency          String         @default("JPY") @db.VarChar(3)
+  specialRequests   String?        @map("special_requests")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  user              User           @relation(fields: [userId], references: [userId], onUpdate: Restrict)
+  tour              Tour           @relation(fields: [tourId], references: [id], onUpdate: Restrict)
   payments          Payment[]
   paymentProofs     PaymentProof[]
 
   @@index([userId])
   @@index([tourId])
-  @@index([availabilityId])
   @@index([status])
+  @@index([tourId, bookingDate])
   @@map("bookings")
 }
 

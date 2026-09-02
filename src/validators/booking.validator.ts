@@ -22,7 +22,6 @@ const bookingSchema = z
     id: z.number().meta({ example: 1 }),
     userId: z.number().meta({ example: 3 }),
     tourId: z.number().meta({ example: 1 }),
-    availabilityId: z.number().nullable().meta({ example: 1 }),
     bookingDate: z.string().meta({ example: '2026-09-01T00:00:00.000Z' }),
     participants: z.number().int().meta({ example: 2 }),
     status: bookingStatusEnum.meta({ example: 'PENDING' }),

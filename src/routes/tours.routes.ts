@@ -1,18 +1,15 @@
 import {
   addImage,
+  bookedDates,
   confirm,
   create,
-  createAvailability,
   getOne,
   list,
-  listAvailability,
   listGuides,
   myTours,
   remove,
-  removeAvailability,
   removeImage,
   update,
-  updateAvailability,
 } from '../controllers/tour.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole, verifyTourAssignment } from '../middleware/rbac'
@@ -20,19 +17,15 @@ import { validateBody, validateQuery } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
 import {
   addTourImageSchema,
-  createAvailabilitySchema,
+  bookedDatesResponseSchema,
   createTourSchema,
-  deleteTourAvailabilityResponseSchema,
   deleteTourImageResponseSchema,
   deleteTourResponseSchema,
-  tourAvailabilityListResponseSchema,
-  tourAvailabilityResponseSchema,
   tourGuidesListResponseSchema,
   tourImageResponseSchema,
   tourListQuerySchema,
   tourResponseSchema,
   toursListResponseSchema,
-  updateAvailabilitySchema,
   updateTourSchema,
 } from '../validators/tour.validator'
 import type { RouteDefinition } from './route-definition'
@@ -84,11 +77,15 @@ export const toursRoutes: RouteDefinition[] = [
   },
   {
     method: 'get',
-    path: '/tours/:tourId/availability',
-    handler: listAvailability,
-    summary: "List a tour's availability slots",
+    path: '/tours/:tourId/booked-dates',
+    handler: bookedDates,
+    summary: "List a tour's future dates that already have a CONFIRMED booking",
+    description:
+      'A date not in this list is bookable (subject to the tour\'s own status and the JST ' +
+      'same-day cutoff) — powers the customer-facing date picker\'s disabled dates. A tour-date ' +
+      'is exclusive to one CONFIRMED booking at a time; see POST /bookings.',
     responses: {
-      200: { description: 'Availability slots, soonest first.', schema: tourAvailabilityListResponseSchema },
+      200: { description: 'Booked dates (YYYY-MM-DD), soonest first.', schema: bookedDatesResponseSchema },
       400: { description: 'tourId was not a positive integer.', schema: apiErrorResponseSchema },
     },
   },
@@ -185,49 +182,6 @@ export const toursRoutes: RouteDefinition[] = [
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
       404: { description: 'No image with that id on that tour.', schema: apiErrorResponseSchema },
-    },
-  },
-  {
-    method: 'post',
-    path: '/tours/:tourId/availability',
-    handler: [...staffOrOwnGuide, validateBody(createAvailabilitySchema), createAvailability],
-    summary: 'Add an availability slot to a tour',
-    request: { body: createAvailabilitySchema },
-    responses: {
-      201: { description: 'Availability slot created.', schema: tourAvailabilityResponseSchema },
-      400: { description: 'tourId was not a positive integer.', schema: apiErrorResponseSchema },
-      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
-      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
-      404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
-      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
-    },
-  },
-  {
-    method: 'put',
-    path: '/tours/:tourId/availability/:availabilityId',
-    handler: [...staffOrOwnGuide, validateBody(updateAvailabilitySchema), updateAvailability],
-    summary: 'Update an availability slot',
-    request: { body: updateAvailabilitySchema },
-    responses: {
-      200: { description: 'Availability slot updated.', schema: tourAvailabilityResponseSchema },
-      400: { description: 'tourId/availabilityId was not a positive integer.', schema: apiErrorResponseSchema },
-      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
-      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
-      404: { description: 'No availability slot with that id on that tour.', schema: apiErrorResponseSchema },
-      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
-    },
-  },
-  {
-    method: 'delete',
-    path: '/tours/:tourId/availability/:availabilityId',
-    handler: [...staffOrOwnGuide, removeAvailability],
-    summary: 'Remove an availability slot',
-    responses: {
-      200: { description: 'Availability slot removed.', schema: deleteTourAvailabilityResponseSchema },
-      400: { description: 'tourId/availabilityId was not a positive integer.', schema: apiErrorResponseSchema },
-      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
-      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
-      404: { description: 'No availability slot with that id on that tour.', schema: apiErrorResponseSchema },
     },
   },
 ]

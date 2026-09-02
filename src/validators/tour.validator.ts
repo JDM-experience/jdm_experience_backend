@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
-// Tour-level operational state, not per-date bookability (that's TourAvailability). A tour always
-// starts PENDING and can only reach AVAILABLE via POST /tours/:id/confirm — see tour.service.ts.
+// Tour-level operational state, not per-date bookability (a date's booked/free status is derived
+// from Bookings themselves — see bookedDatesResponseSchema below). A tour always starts PENDING
+// and can only reach AVAILABLE via POST /tours/:id/confirm — see tour.service.ts.
 const statusEnum = z.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE', 'UNDER_MAINTENANCE'])
 const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
@@ -38,28 +39,12 @@ export const updateTourSchema = z
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
-export const createAvailabilitySchema = z.object({
-  startDatetime: z.iso.datetime({ offset: true }),
-  spotsRemaining: z.number().int().nonnegative(),
-})
-
-export const updateAvailabilitySchema = z
-  .object({
-    startDatetime: z.iso.datetime({ offset: true }).optional(),
-    spotsRemaining: z.number().int().nonnegative().optional(),
-  })
-  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
-
 export const tourListQuerySchema = z.object({ status: statusEnum.optional() })
 export const tourIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+export const tourChildParamSchema = z.object({ tourId: z.coerce.number().int().positive() })
 export const tourImageParamSchema = z.object({
   tourId: z.coerce.number().int().positive(),
   imageId: z.coerce.number().int().positive(),
-})
-export const tourAvailabilityParamSchema = z.object({ tourId: z.coerce.number().int().positive() })
-export const tourAvailabilityItemParamSchema = z.object({
-  tourId: z.coerce.number().int().positive(),
-  availabilityId: z.coerce.number().int().positive(),
 })
 
 const tourGuideSchema = z
@@ -81,14 +66,6 @@ const tourImageSchema = z
   })
   .meta({ id: 'TourImage' })
 
-const tourAvailabilitySchema = z
-  .object({
-    id: z.number().meta({ example: 1 }),
-    startDatetime: z.string().meta({ example: '2026-09-01T09:00:00+09:00' }),
-    spotsRemaining: z.number().int().meta({ example: 4 }),
-  })
-  .meta({ id: 'TourAvailability' })
-
 const tourSchema = z
   .object({
     id: z.number().meta({ example: 1 }),
@@ -101,7 +78,6 @@ const tourSchema = z
     seats: z.number().int().meta({ example: 4 }),
     guide: tourGuideSchema.nullable(),
     images: z.array(tourImageSchema),
-    availability: z.array(tourAvailabilitySchema),
     createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
     updatedAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
   })
@@ -124,12 +100,8 @@ export const deleteTourImageResponseSchema = z
   .object({ success: z.literal(true), data: z.null() })
   .meta({ id: 'DeleteTourImageResponse' })
 
-export const tourAvailabilityResponseSchema = z
-  .object({ success: z.literal(true), data: tourAvailabilitySchema })
-  .meta({ id: 'TourAvailabilityResponse' })
-export const tourAvailabilityListResponseSchema = z
-  .object({ success: z.literal(true), data: z.array(tourAvailabilitySchema) })
-  .meta({ id: 'TourAvailabilityListResponse' })
-export const deleteTourAvailabilityResponseSchema = z
-  .object({ success: z.literal(true), data: z.null() })
-  .meta({ id: 'DeleteTourAvailabilityResponse' })
+// Future dates (YYYY-MM-DD) that already have a CONFIRMED booking for a tour — a date not in this
+// list is bookable (subject to the tour's own status and the JST same-day cutoff).
+export const bookedDatesResponseSchema = z
+  .object({ success: z.literal(true), data: z.array(z.string()).meta({ example: ['2026-09-10', '2026-09-14'] }) })
+  .meta({ id: 'BookedDatesResponse' })

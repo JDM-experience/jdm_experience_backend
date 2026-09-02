@@ -1,12 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as tourService from '../services/tour.service'
-import {
-  tourAvailabilityItemParamSchema,
-  tourAvailabilityParamSchema,
-  tourIdParamSchema,
-  tourImageParamSchema,
-} from '../validators/tour.validator'
+import { tourChildParamSchema, tourIdParamSchema, tourImageParamSchema } from '../validators/tour.validator'
 import type { TourStatus } from '../generated/prisma/client'
 
 function parseParams<T>(schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }, value: unknown): T {
@@ -90,7 +85,7 @@ export async function confirm(req: Request, res: Response, next: NextFunction) {
 
 export async function addImage(req: Request, res: Response, next: NextFunction) {
   try {
-    const { tourId } = parseParams(tourAvailabilityParamSchema, req.params)
+    const { tourId } = parseParams(tourChildParamSchema, req.params)
     const image = await tourService.addTourImage(tourId, req.body)
     res.status(201).json({ success: true, data: image })
   } catch (error) {
@@ -108,40 +103,10 @@ export async function removeImage(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function listAvailability(req: Request, res: Response, next: NextFunction) {
+export async function bookedDates(req: Request, res: Response, next: NextFunction) {
   try {
-    const { tourId } = parseParams(tourAvailabilityParamSchema, req.params)
-    res.json({ success: true, data: await tourService.listAvailability(tourId) })
-  } catch (error) {
-    next(error)
-  }
-}
-
-export async function createAvailability(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { tourId } = parseParams(tourAvailabilityParamSchema, req.params)
-    const row = await tourService.createAvailability(tourId, req.body)
-    res.status(201).json({ success: true, data: row })
-  } catch (error) {
-    next(error)
-  }
-}
-
-export async function updateAvailability(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { tourId, availabilityId } = parseParams(tourAvailabilityItemParamSchema, req.params)
-    const row = await tourService.updateAvailability(tourId, availabilityId, req.body)
-    res.json({ success: true, data: row })
-  } catch (error) {
-    next(error)
-  }
-}
-
-export async function removeAvailability(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { tourId, availabilityId } = parseParams(tourAvailabilityItemParamSchema, req.params)
-    await tourService.removeAvailability(tourId, availabilityId)
-    res.json({ success: true, data: null })
+    const { tourId } = parseParams(tourChildParamSchema, req.params)
+    res.json({ success: true, data: await tourService.listBookedDates(tourId) })
   } catch (error) {
     next(error)
   }

@@ -7,7 +7,6 @@ type Actor = { userId: number; role: Role }
 
 const TOUR_INCLUDE = {
   images: { orderBy: { sortOrder: 'asc' as const } },
-  availability: { orderBy: { startDatetime: 'asc' as const } },
   guide: { include: { user: true } },
 } satisfies Prisma.TourInclude
 
@@ -34,11 +33,6 @@ function toPublicTour(tour: TourWithRelations) {
         }
       : null,
     images: tour.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl, sortOrder: img.sortOrder })),
-    availability: tour.availability.map((a) => ({
-      id: a.id,
-      startDatetime: a.startDatetime,
-      spotsRemaining: a.spotsRemaining,
-    })),
     createdAt: tour.createdAt,
     updatedAt: tour.updatedAt,
   }
@@ -237,41 +231,14 @@ export async function removeTourImage(tourId: number, imageId: number): Promise<
   await prisma.tourImage.delete({ where: { id: imageId } })
 }
 
-export async function listAvailability(tourId: number) {
-  const rows = await prisma.tourAvailability.findMany({ where: { tourId }, orderBy: { startDatetime: 'asc' } })
-  return rows.map((a) => ({ id: a.id, startDatetime: a.startDatetime, spotsRemaining: a.spotsRemaining }))
-}
-
-export async function createAvailability(tourId: number, input: { startDatetime: string; spotsRemaining: number }) {
-  const tour = await prisma.tour.findUnique({ where: { id: tourId } })
-  if (!tour) throw new ApiError(404, 'Tour not found.')
-
-  const row = await prisma.tourAvailability.create({
-    data: { tourId, startDatetime: new Date(input.startDatetime), spotsRemaining: input.spotsRemaining },
+/** Which future dates already have a CONFIRMED booking (and so can't be booked again) — powers
+ *  the customer-facing date picker's disabled-dates list. See booking.service.ts for the same
+ *  invariant enforced authoritatively at booking-create/confirm time. */
+export async function listBookedDates(tourId: number): Promise<string[]> {
+  const rows = await prisma.booking.findMany({
+    where: { tourId, status: 'CONFIRMED', bookingDate: { gte: new Date(new Date().toISOString().slice(0, 10)) } },
+    select: { bookingDate: true },
+    orderBy: { bookingDate: 'asc' },
   })
-  return { id: row.id, startDatetime: row.startDatetime, spotsRemaining: row.spotsRemaining }
-}
-
-export async function updateAvailability(
-  tourId: number,
-  availabilityId: number,
-  input: { startDatetime?: string; spotsRemaining?: number },
-) {
-  const existing = await prisma.tourAvailability.findUnique({ where: { id: availabilityId } })
-  if (!existing || existing.tourId !== tourId) throw new ApiError(404, 'Availability slot not found.')
-
-  const row = await prisma.tourAvailability.update({
-    where: { id: availabilityId },
-    data: {
-      startDatetime: input.startDatetime ? new Date(input.startDatetime) : undefined,
-      spotsRemaining: input.spotsRemaining,
-    },
-  })
-  return { id: row.id, startDatetime: row.startDatetime, spotsRemaining: row.spotsRemaining }
-}
-
-export async function removeAvailability(tourId: number, availabilityId: number): Promise<void> {
-  const existing = await prisma.tourAvailability.findUnique({ where: { id: availabilityId } })
-  if (!existing || existing.tourId !== tourId) throw new ApiError(404, 'Availability slot not found.')
-  await prisma.tourAvailability.delete({ where: { id: availabilityId } })
+  return rows.map((r) => r.bookingDate.toISOString().slice(0, 10))
 }

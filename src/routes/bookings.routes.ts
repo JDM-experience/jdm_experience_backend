@@ -15,14 +15,18 @@ export const bookingsRoutes: RouteDefinition[] = [
     path: '/bookings',
     handler: [requireAuth, validateBody(createBookingSchema), create],
     summary: 'Create a booking',
-    description: 'Re-validates the JST same-day cutoff and availability inside a transaction; decrements spotsRemaining.',
+    description:
+      'Re-validates the JST same-day cutoff, the tour\'s seat cap, and that the date has no ' +
+      'CONFIRMED booking yet. A tour-date is exclusive to one CONFIRMED booking at a time, but ' +
+      'two PENDING requests for the same date may coexist until staff confirms one (see PUT ' +
+      '/bookings/:id) — see GET /tours/:tourId/booked-dates for the customer-facing disabled-dates list.',
     request: { body: createBookingSchema },
     responses: {
       201: { description: 'Booking created.', schema: bookingResponseSchema },
-      400: { description: 'Booking closed for today, or no availability configured for that date.', schema: apiErrorResponseSchema },
+      400: { description: 'Booking closed for today, or participants exceeds the tour\'s seats.', schema: apiErrorResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       404: { description: 'Tour not available for booking.', schema: apiErrorResponseSchema },
-      409: { description: 'Not enough spots remaining.', schema: apiErrorResponseSchema },
+      409: { description: 'This date is already booked (CONFIRMED) for this tour.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
@@ -70,12 +74,16 @@ export const bookingsRoutes: RouteDefinition[] = [
       update,
     ],
     summary: 'Update a booking’s status/paymentStatus',
+    description:
+      'Setting status to CONFIRMED is where per-date exclusivity is actually enforced: rejected ' +
+      'if another booking on the same tour+date is already CONFIRMED.',
     request: { body: updateBookingSchema },
     responses: {
       200: { description: 'Booking updated.', schema: bookingResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
       404: { description: 'No booking with that id.', schema: apiErrorResponseSchema },
+      409: { description: 'Another booking for this tour and date is already CONFIRMED.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },

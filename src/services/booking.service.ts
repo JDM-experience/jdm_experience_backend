@@ -12,7 +12,6 @@ function toPublicBooking(b: Booking) {
     id: b.id,
     userId: b.userId,
     tourId: b.tourId,
-    availabilityId: b.availabilityId,
     bookingDate: b.bookingDate,
     participants: b.participants,
     status: b.status,
@@ -29,8 +28,11 @@ function toPublicBooking(b: Booking) {
 
 /**
  * The one rule everything else re-validates against: no new booking after the JST cutoff, and
- * never more participants than a date actually has room for. Runs inside a transaction so a
- * concurrent booking on the same date can't both succeed and overbook the slot.
+ * `participants` never exceeds the tour's seat cap. A tour-date itself is exclusive to at most
+ * one CONFIRMED booking — like reserving the whole vehicle for that day, not a seat within it —
+ * but that exclusivity is enforced at *confirmation* time (see updateBookingStatus), not here: a
+ * PENDING request doesn't block another customer from also requesting the same date, so two
+ * PENDING requests for one date can coexist until staff confirms one of them.
  */
 export async function createBooking(
   actor: Actor,
@@ -44,55 +46,38 @@ export async function createBooking(
     )
   }
 
-  const booking = await prisma.$transaction(async (tx) => {
-    const tour = await tx.tour.findUnique({ where: { id: input.tourId } })
-    if (!tour || tour.isDeleted || tour.status !== 'AVAILABLE') {
-      throw new ApiError(404, 'This tour is not available for booking.')
-    }
+  const tour = await prisma.tour.findUnique({ where: { id: input.tourId } })
+  if (!tour || tour.isDeleted || tour.status !== 'AVAILABLE') {
+    throw new ApiError(404, 'This tour is not available for booking.')
+  }
+  if (input.participants > tour.seats) {
+    throw new ApiError(400, `This tour seats up to ${tour.seats}.`)
+  }
 
-    // `TourAvailability.startDatetime` is an absolute instant (stored as UTC); the customer's
-    // `bookingDate` is a JST calendar date. Matching them means bounding by the JST day's start
-    // and the next JST day's start, expressed as UTC instants — not naive UTC-day boundaries,
-    // which would be off by up to 9 hours near midnight.
-    const jstDayStart = new Date(`${input.bookingDate}T00:00:00+09:00`)
-    const nextJstDayStart = new Date(jstDayStart.getTime() + 24 * 60 * 60 * 1000)
-    const availability = await tx.tourAvailability.findFirst({
-      where: { tourId: input.tourId, startDatetime: { gte: jstDayStart, lt: nextJstDayStart } },
-    })
+  const bookingDate = new Date(`${input.bookingDate}T00:00:00.000Z`)
+  const alreadyConfirmed = await prisma.booking.findFirst({
+    where: { tourId: input.tourId, bookingDate, status: 'CONFIRMED' },
+  })
+  if (alreadyConfirmed) {
+    throw new ApiError(409, 'This date is already booked for this tour. Please choose another date.')
+  }
 
-    if (!availability) {
-      throw new ApiError(400, 'No availability is configured for this tour on the selected date.')
-    }
-    if (availability.spotsRemaining < input.participants) {
-      throw new ApiError(409, 'Not enough spots remaining for this date.')
-    }
-
-    // Guarded by the transaction: a concurrent booking against the same slot can't both pass
-    // the check above and both decrement past zero.
-    await tx.tourAvailability.update({
-      where: { id: availability.id },
-      data: { spotsRemaining: { decrement: input.participants } },
-    })
-
-    return tx.booking.create({
-      data: {
-        userId: actor.userId,
-        tourId: tour.id,
-        availabilityId: availability.id,
-        // bookingDate is a bare DATE column — store the calendar date the customer picked
-        // literally, not derived from the JST-offset instant above (which can shift the UTC
-        // calendar date near midnight).
-        bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
-        participants: input.participants,
-        status: 'PENDING',
-        totalPrice: Number(tour.price) * input.participants,
-        paymentStatus: 'UNPAID',
-        tourNameSnapshot: tour.name,
-        unitPriceSnapshot: tour.price,
-        currency: tour.currency ?? 'JPY',
-        specialRequests: input.specialRequests,
-      },
-    })
+  const booking = await prisma.booking.create({
+    data: {
+      userId: actor.userId,
+      tourId: tour.id,
+      // bookingDate is a bare DATE column — store the calendar date the customer picked
+      // literally, no timezone offset math needed since it's not compared against an instant.
+      bookingDate,
+      participants: input.participants,
+      status: 'PENDING',
+      totalPrice: Number(tour.price) * input.participants,
+      paymentStatus: 'UNPAID',
+      tourNameSnapshot: tour.name,
+      unitPriceSnapshot: tour.price,
+      currency: tour.currency ?? 'JPY',
+      specialRequests: input.specialRequests,
+    },
   })
 
   return toPublicBooking(booking)
@@ -130,12 +115,27 @@ export async function updateBookingStatus(
   id: number,
   input: { status?: BookingStatus; paymentStatus?: PaymentStatus },
 ) {
-  const existing = await prisma.booking.findUnique({ where: { id } })
-  if (!existing) throw new ApiError(404, 'Booking not found.')
+  const updated = await prisma.$transaction(async (tx) => {
+    const existing = await tx.booking.findUnique({ where: { id } })
+    if (!existing) throw new ApiError(404, 'Booking not found.')
 
-  const updated = await prisma.booking.update({
-    where: { id },
-    data: { status: input.status, paymentStatus: input.paymentStatus },
+    // This is where per-date exclusivity is actually enforced (createBooking only rejects a
+    // *new* request against an already-CONFIRMED date; two PENDING requests for the same date
+    // are allowed to coexist until one is confirmed). Guarded by the transaction so confirming
+    // two competing PENDING bookings for the same date concurrently can't both succeed.
+    if (input.status === 'CONFIRMED' && existing.status !== 'CONFIRMED') {
+      const conflicting = await tx.booking.findFirst({
+        where: { tourId: existing.tourId, bookingDate: existing.bookingDate, status: 'CONFIRMED', id: { not: id } },
+      })
+      if (conflicting) {
+        throw new ApiError(409, 'Another booking for this tour and date is already confirmed.')
+      }
+    }
+
+    return tx.booking.update({
+      where: { id },
+      data: { status: input.status, paymentStatus: input.paymentStatus },
+    })
   })
 
   await recordAuditLog({
