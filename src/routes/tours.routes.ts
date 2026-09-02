@@ -1,5 +1,6 @@
 import {
   addImage,
+  confirm,
   create,
   createAvailability,
   getOne,
@@ -107,19 +108,35 @@ export const toursRoutes: RouteDefinition[] = [
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
-  // Delete/archive: Super Admin (any tour), or a Tour Guide archiving their own tour. Admin may
-  // never archive a tour. requireRole runs first, so Admin is rejected before verifyTourAssignment
+  // Delete (soft): Super Admin (any tour), or a Tour Guide deleting their own tour. Admin may
+  // never delete a tour. requireRole runs first, so Admin is rejected before verifyTourAssignment
   // (which would otherwise also bypass Admin) ever executes.
   {
     method: 'delete',
     path: '/tours/:id',
     handler: [requireAuth, requireRole('SUPER_ADMIN', 'TOUR_GUIDE'), verifyTourAssignment, remove],
-    summary: 'Archive a tour (soft delete)',
+    summary: 'Delete a tour (soft delete)',
     responses: {
-      200: { description: 'Tour archived.', schema: deleteTourResponseSchema },
+      200: { description: 'Tour deleted.', schema: deleteTourResponseSchema },
       400: { description: 'id was not a positive integer.', schema: apiErrorResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not SUPER_ADMIN, or not the assigned guide.', schema: apiErrorResponseSchema },
+      404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
+    },
+  },
+  // Confirmation: the one way a tour moves PENDING -> AVAILABLE. Staff-only, deliberately not
+  // available through PUT /tours/:id (which also rejects a TOUR_GUIDE-supplied status, staff can
+  // still hit either endpoint for a manual transition afterwards).
+  {
+    method: 'post',
+    path: '/tours/:id/confirm',
+    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), confirm],
+    summary: 'Confirm a PENDING tour, moving it to AVAILABLE',
+    responses: {
+      200: { description: 'Tour confirmed and now AVAILABLE.', schema: tourResponseSchema },
+      400: { description: 'Tour is not PENDING.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
       404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
     },
   },
@@ -128,12 +145,16 @@ export const toursRoutes: RouteDefinition[] = [
     path: '/tours/:id',
     handler: [...staffOrOwnGuide, validateBody(updateTourSchema), update],
     summary: 'Update a tour',
+    description:
+      'A Tour Guide may edit their own tour\'s name/description/price/seats/images, but not its ' +
+      '`status` (staff-only — see POST /tours/:id/confirm and manual status changes) or `guideId` ' +
+      '(cannot reassign to a different guide).',
     request: { body: updateTourSchema },
     responses: {
       200: { description: 'Tour updated.', schema: tourResponseSchema },
       400: { description: 'id was not a positive integer.', schema: apiErrorResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
-      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
+      403: { description: 'Not staff or the assigned guide, or a guide tried to change status/guideId.', schema: apiErrorResponseSchema },
       404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },

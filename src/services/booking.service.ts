@@ -46,7 +46,7 @@ export async function createBooking(
 
   const booking = await prisma.$transaction(async (tx) => {
     const tour = await tx.tour.findUnique({ where: { id: input.tourId } })
-    if (!tour || tour.status !== 'ACTIVE') {
+    if (!tour || tour.isDeleted || tour.status !== 'AVAILABLE') {
       throw new ApiError(404, 'This tour is not available for booking.')
     }
 

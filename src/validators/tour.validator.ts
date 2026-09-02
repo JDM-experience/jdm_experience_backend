@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
-const statusEnum = z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'])
+// Tour-level operational state, not per-date bookability (that's TourAvailability). A tour always
+// starts PENDING and can only reach AVAILABLE via POST /tours/:id/confirm — see tour.service.ts.
+const statusEnum = z.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE', 'UNDER_MAINTENANCE'])
 const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
 export const addTourImageSchema = z.object({
@@ -14,7 +16,9 @@ export const createTourSchema = z.object({
   description: z.string().trim().max(5000).optional(),
   price: z.number().positive('Price must be greater than 0.'),
   currency: z.string().trim().length(3).default('JPY'),
-  status: statusEnum.default('ACTIVE'),
+  // No status field here — every new tour starts PENDING regardless of who creates it, and only
+  // moves to AVAILABLE via an explicit POST /tours/:id/confirm (see "Automatic Availability After
+  // Confirmation" in the Tour Management spec).
   seats: z.number().int().positive('Seats must be a whole number greater than 0.').default(1),
   guideId: z.number().int().positive().nullable().optional(),
   // Optional — attach images (already uploaded via POST /uploads/tour-images) in the same request.
@@ -93,7 +97,7 @@ const tourSchema = z
     description: z.string().nullable().meta({ example: 'A scenic drive tour around Mt. Fuji.' }),
     price: z.number().meta({ example: 25000 }),
     currency: z.string().meta({ example: 'JPY' }),
-    status: statusEnum.meta({ example: 'ACTIVE' }),
+    status: statusEnum.meta({ example: 'AVAILABLE' }),
     seats: z.number().int().meta({ example: 4 }),
     guide: tourGuideSchema.nullable(),
     images: z.array(tourImageSchema),

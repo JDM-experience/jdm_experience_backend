@@ -46,7 +46,7 @@ function toPublicTour(tour: TourWithRelations) {
 
 export async function listTours(filter?: { status?: TourStatus }) {
   const tours = await prisma.tour.findMany({
-    where: filter?.status ? { status: filter.status } : undefined,
+    where: { isDeleted: false, ...(filter?.status ? { status: filter.status } : {}) },
     include: TOUR_INCLUDE,
     orderBy: { id: 'desc' },
   })
@@ -55,7 +55,7 @@ export async function listTours(filter?: { status?: TourStatus }) {
 
 export async function listMyTours(guideUserId: number) {
   const tours = await prisma.tour.findMany({
-    where: { guide: { userId: guideUserId } },
+    where: { isDeleted: false, guide: { userId: guideUserId } },
     include: TOUR_INCLUDE,
     orderBy: { id: 'desc' },
   })
@@ -64,7 +64,7 @@ export async function listMyTours(guideUserId: number) {
 
 export async function getTour(id: number) {
   const tour = await prisma.tour.findUnique({ where: { id }, include: TOUR_INCLUDE })
-  if (!tour) throw new ApiError(404, 'Tour not found.')
+  if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
   return toPublicTour(tour)
 }
 
@@ -98,7 +98,6 @@ export async function createTour(
     description?: string
     price: number
     currency: string
-    status: TourStatus
     seats: number
     guideId?: number | null
     images?: { imageUrl: string; sortOrder: number }[]
@@ -122,7 +121,9 @@ export async function createTour(
       description: input.description,
       price: input.price,
       currency: input.currency,
-      status: input.status,
+      // Always PENDING on create, regardless of who creates it — an admin must explicitly confirm
+      // it (POST /tours/:id/confirm) before it becomes bookable.
+      status: 'PENDING',
       seats: input.seats,
       guideId,
       images: input.images?.length
@@ -150,14 +151,24 @@ export async function updateTour(
     guideId?: number | null
   },
 ) {
-  // A guide may edit their own tour's details, but may not hand it off to someone else.
-  if (actor.role === 'TOUR_GUIDE' && input.guideId !== undefined) {
-    const ownGuideId = await guideIdForUser(actor.userId)
-    const tour = await prisma.tour.findUnique({ where: { id: tourId } })
-    if (tour?.guideId !== ownGuideId || input.guideId !== ownGuideId) {
-      throw new ApiError(403, 'Tour guides cannot reassign a tour to a different guide.')
+  // A guide may edit their own tour's details, but may not hand it off to someone else, and may
+  // not change its availability status — that's a staff-only action (see confirmTour below and
+  // the "Manual Availability Management" rules).
+  if (actor.role === 'TOUR_GUIDE') {
+    if (input.status !== undefined) {
+      throw new ApiError(403, 'Tour guides cannot change a tour\'s availability status.')
+    }
+    if (input.guideId !== undefined) {
+      const ownGuideId = await guideIdForUser(actor.userId)
+      const tour = await prisma.tour.findUnique({ where: { id: tourId } })
+      if (tour?.guideId !== ownGuideId || input.guideId !== ownGuideId) {
+        throw new ApiError(403, 'Tour guides cannot reassign a tour to a different guide.')
+      }
     }
   }
+
+  const existing = await prisma.tour.findUnique({ where: { id: tourId } })
+  if (!existing || existing.isDeleted) throw new ApiError(404, 'Tour not found.')
 
   const tour = await prisma.tour.update({
     where: { id: tourId },
@@ -178,13 +189,36 @@ export async function updateTour(
   return toPublicTour(tour)
 }
 
-/** Soft-delete — archives rather than removing, since historical bookings reference this tour. */
-export async function archiveTour(actor: Actor, tourId: number): Promise<void> {
+/**
+ * Soft-delete — flips `isDeleted`/`deletedAt` rather than removing the row or its relations,
+ * since historical Bookings/Payments still reference this tour. `status` is left untouched: it's
+ * a separate axis (see the Tour model), so a deleted tour's last known operational state isn't
+ * lost if it's ever restored.
+ */
+export async function deleteTour(actor: Actor, tourId: number): Promise<void> {
   const tour = await prisma.tour.findUnique({ where: { id: tourId } })
-  if (!tour) throw new ApiError(404, 'Tour not found.')
+  if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
 
-  await prisma.tour.update({ where: { id: tourId }, data: { status: 'ARCHIVED' } })
-  await recordAuditLog({ userId: actor.userId, action: 'tour.archive', entity: 'tours', entityId: tourId })
+  await prisma.tour.update({ where: { id: tourId }, data: { isDeleted: true, deletedAt: new Date() } })
+  await recordAuditLog({ userId: actor.userId, action: 'tour.delete', entity: 'tours', entityId: tourId })
+}
+
+/** Staff-only: moves a PENDING tour to AVAILABLE. The one place `status` transitions automatically
+ *  rather than via a direct staff edit — see "Automatic Availability After Confirmation". */
+export async function confirmTour(actor: Actor, tourId: number) {
+  const tour = await prisma.tour.findUnique({ where: { id: tourId } })
+  if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
+  if (tour.status !== 'PENDING') {
+    throw new ApiError(400, `Only a PENDING tour can be confirmed (this tour is ${tour.status}).`)
+  }
+
+  const updated = await prisma.tour.update({
+    where: { id: tourId },
+    data: { status: 'AVAILABLE' },
+    include: TOUR_INCLUDE,
+  })
+  await recordAuditLog({ userId: actor.userId, action: 'tour.confirm', entity: 'tours', entityId: tourId })
+  return toPublicTour(updated)
 }
 
 export async function addTourImage(tourId: number, input: { imageUrl: string; sortOrder: number }) {

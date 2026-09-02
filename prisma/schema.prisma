@@ -68,11 +68,15 @@ model User {
   @@map("users")
 }
 
+// Tour-level operational state (NOT per-date — date/time bookability is a separate concern
+// handled entirely by TourAvailability + Booking). A new tour always starts PENDING; only an
+// explicit admin confirmation (POST /tours/:id/confirm) moves it to AVAILABLE. From there, staff
+// can move it manually between AVAILABLE/UNAVAILABLE/UNDER_MAINTENANCE. See tour.service.ts.
 enum TourStatus {
-  DRAFT
-  ACTIVE
-  INACTIVE
-  ARCHIVED
+  PENDING
+  AVAILABLE
+  UNAVAILABLE
+  UNDER_MAINTENANCE
 }
 
 enum BookingStatus {
@@ -123,9 +127,14 @@ model Tour {
   description  String?
   price        Decimal            @db.Decimal(10, 2)
   currency     String             @default("JPY") @db.VarChar(3)
-  status       TourStatus         @default(ACTIVE)
+  status       TourStatus         @default(PENDING)
   seats        Int                @default(1)
   guideId      Int?               @map("guide_id")
+  /// Soft-delete marker, independent of `status` — status is purely the 4 operational values
+  /// above; deletion is a separate axis so a deleted tour's last known status is never lost.
+  /// Preserves related Bookings/Payments (never hard-deleted — see deleteTour in tour.service.ts).
+  isDeleted    Boolean            @default(false) @map("is_deleted")
+  deletedAt    DateTime?          @map("deleted_at")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
   guide        TourGuide?         @relation(fields: [guideId], references: [id], onDelete: Restrict)
@@ -135,6 +144,7 @@ model Tour {
 
   @@index([guideId])
   @@index([status])
+  @@index([isDeleted])
   @@map("tours")
 }
 

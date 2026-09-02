@@ -71,8 +71,18 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = parseParams(tourIdParamSchema, req.params)
-    await tourService.archiveTour(req.user!, id)
+    await tourService.deleteTour(req.user!, id)
     res.json({ success: true, data: null })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function confirm(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = parseParams(tourIdParamSchema, req.params)
+    const tour = await tourService.confirmTour(req.user!, id)
+    res.json({ success: true, data: tour })
   } catch (error) {
     next(error)
   }
