@@ -45,6 +45,23 @@ export const updateTourSchema = z
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
+export const tourContactSchema = z
+  .object({
+    contactName: z.string().trim().min(1).max(150).optional(),
+    contactEmail: z.string().trim().toLowerCase().email('Enter a valid email address.').optional(),
+    contactPhone: z.string().trim().min(1).max(50).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
+
+const tourContactResponseDataSchema = z.object({
+  contactName: z.string().nullable().meta({ example: 'John Smith' }),
+  contactEmail: z.string().nullable().meta({ example: 'john@example.com' }),
+  contactPhone: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
+})
+export const tourContactResponseSchema = z
+  .object({ success: z.literal(true), data: tourContactResponseDataSchema })
+  .meta({ id: 'TourContactResponse' })
+
 export const tourListQuerySchema = z.object({
   status: statusEnum.optional(),
   // Empty string behaves like "not provided" — a cleared search box submits `?search=`.

@@ -33,6 +33,24 @@ export async function myTours(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function getContact(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = parseParams(tourIdParamSchema, req.params)
+    res.json({ success: true, data: await tourService.getTourContact(id) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function updateContact(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = parseParams(tourIdParamSchema, req.params)
+    res.json({ success: true, data: await tourService.updateTourContact(req.user!, id, req.body) })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function listGuides(req: Request, res: Response, next: NextFunction) {
   try {
     res.json({ success: true, data: await tourService.listTourGuides() })

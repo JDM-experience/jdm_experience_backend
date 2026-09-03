@@ -27,3 +27,24 @@ export async function createTourImageUploadUrl(input: {
   const objectPath = `tours/${randomUUID()}.${extensionFor(input.contentType)}`
   return createSignedUploadUrl(objectPath)
 }
+
+/** Same signed-URL mechanism, same bucket -- just a different folder prefix so a payment
+ *  method's image and a tour's images can't collide. SUPER_ADMIN only (see uploads.routes.ts). */
+export async function createPaymentMethodImageUploadUrl(input: {
+  fileName: string
+  contentType: ImageContentType
+}): Promise<SignedUpload> {
+  const objectPath = `payment-methods/${randomUUID()}.${extensionFor(input.contentType)}`
+  return createSignedUploadUrl(objectPath)
+}
+
+/** Same mechanism again, for a customer's payment-proof screenshot/photo. Any authenticated user
+ *  may request a signed URL here (booking ownership is checked separately, when the resulting
+ *  publicUrl is actually attached via POST /bookings/:id/payment-proof — see payment.service.ts). */
+export async function createPaymentProofUploadUrl(input: {
+  fileName: string
+  contentType: ImageContentType
+}): Promise<SignedUpload> {
+  const objectPath = `payment-proofs/${randomUUID()}.${extensionFor(input.contentType)}`
+  return createSignedUploadUrl(objectPath)
+}

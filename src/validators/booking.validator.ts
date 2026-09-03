@@ -3,12 +3,21 @@ import { z } from 'zod'
 const bookingStatusEnum = z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'])
 const paymentStatusEnum = z.enum(['UNPAID', 'PENDING', 'PAID', 'FAILED', 'REFUNDED'])
 
-// No `bookingTime` field, deliberately — customers select a date only.
+// No `bookingTime` field, deliberately — customers select a date only. No `deliveryAddress`
+// either — a reservation has no shipping component; contact info below is how the customer and
+// tour owner reach each other, not a shipping destination.
 export const createBookingSchema = z.object({
   tourId: z.number().int().positive(),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'bookingDate must be in YYYY-MM-DD format.'),
   participants: z.number().int().positive().default(1),
   specialRequests: z.string().trim().max(2000).optional(),
+  // Contact info captured at booking time, and the customer's chosen payment method -- both
+  // optional so existing callers/tests that don't send them still work, but the checkout flow
+  // always sends them.
+  customerName: z.string().trim().min(1).max(150).optional(),
+  customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address.').optional(),
+  customerPhone: z.string().trim().min(1).max(50).optional(),
+  paymentMethodId: z.number().int().positive().optional(),
 })
 
 export const updateBookingSchema = z
@@ -32,6 +41,11 @@ const bookingSchema = z
     unitPriceSnapshot: z.number().meta({ example: 25000 }),
     currency: z.string().meta({ example: 'JPY' }),
     specialRequests: z.string().nullable().meta({ example: null }),
+    customerName: z.string().nullable().meta({ example: 'Jane Doe' }),
+    customerEmail: z.string().nullable().meta({ example: 'jane@example.com' }),
+    customerPhone: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
+    paymentMethodId: z.number().nullable().meta({ example: 1 }),
+    paymentMethodName: z.string().nullable().meta({ example: 'GCash' }),
     createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
   })
   .meta({ id: 'Booking' })

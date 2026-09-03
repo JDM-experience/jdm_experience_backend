@@ -136,6 +136,13 @@ model Tour {
   /// Preserves related Bookings/Payments (never hard-deleted — see deleteTour in tour.service.ts).
   isDeleted   Boolean     @default(false) @map("is_deleted")
   deletedAt   DateTime?   @map("deleted_at")
+  /// Customer-facing contact info shown once a booking on this tour is CONFIRMED (see the
+  /// confirmation email in booking.service.ts) — deliberately separate from the owning
+  /// TourGuide's own account email/phone, since staff may want the two to differ. Editable by
+  /// the tour's own owner or SUPER_ADMIN only (see GET/PUT /tours/:id/contact).
+  contactName  String?     @map("contact_name")
+  contactEmail String?     @map("contact_email")
+  contactPhone String?     @map("contact_phone")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
   guide       TourGuide?  @relation(fields: [guideId], references: [id], onDelete: Restrict)
@@ -195,9 +202,16 @@ model Booking {
   unitPriceSnapshot Decimal        @map("unit_price_snapshot") @db.Decimal(10, 2)
   currency          String         @default("JPY") @db.VarChar(3)
   specialRequests   String?        @map("special_requests")
+  /// Contact details captured at booking time (not always the same as the User's own account
+  /// info) -- used for the confirmation email and by staff reviewing the booking.
+  customerName      String?        @map("customer_name")
+  customerEmail     String?        @map("customer_email")
+  customerPhone     String?        @map("customer_phone")
+  paymentMethodId   Int?           @map("payment_method_id")
   createdAt         DateTime       @default(now()) @map("created_at")
   user              User           @relation(fields: [userId], references: [userId], onUpdate: Restrict)
   tour              Tour           @relation(fields: [tourId], references: [id], onUpdate: Restrict)
+  paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   payments          Payment[]
   paymentProofs     PaymentProof[]
 
@@ -205,7 +219,26 @@ model Booking {
   @@index([tourId])
   @@index([status])
   @@index([tourId, bookingDate])
+  @@index([paymentMethodId])
   @@map("bookings")
+}
+
+/// Managed by SUPER_ADMIN (see payment-method.routes.ts) -- customers only ever see the active
+/// ones (GET /payment-methods). Deactivating rather than deleting preserves historical bookings'
+/// paymentMethod reference; deleting one still leaves those bookings intact (paymentMethodId ->
+/// null, see Booking.paymentMethod's onDelete above) rather than failing.
+model PaymentMethod {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  imageUrl    String?   @map("image_url")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  bookings    Booking[]
+
+  @@index([isActive])
+  @@map("payment_methods")
 }
 
 model Payment {

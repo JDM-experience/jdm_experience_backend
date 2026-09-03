@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
+import { sendPaymentProofSubmittedEmail } from './email.service'
 import type { Payment, PaymentStatus, Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
@@ -75,21 +76,31 @@ export async function listPaymentsForBooking(actor: Actor, bookingId: number) {
   return rows.map(toPublicPayment)
 }
 
+/**
+ * Attaches payment-proof metadata to a booking and notifies SUPER_ADMIN, ADMIN, and the tour's
+ * own owner (never other, unrelated Tour Guides) -- recipients are looked up fresh from the
+ * database every time, never hardcoded. Moves paymentStatus UNPAID -> PENDING ("payment
+ * submitted, awaiting staff review") -- this never confirms the booking itself; only an explicit
+ * staff action (PUT /bookings/:id, status=CONFIRMED) does that, in booking.service.ts.
+ */
 export async function addPaymentProof(
   actor: Actor,
   bookingId: number,
   input: { fileUrl: string; fileName: string; fileType: string },
 ) {
-  await assertBookingAccess(actor, bookingId)
+  const booking = await assertBookingAccess(actor, bookingId)
 
-  const proof = await prisma.paymentProof.create({
-    data: {
-      bookingId,
-      uploadedBy: actor.userId,
-      fileUrl: input.fileUrl,
-      fileName: input.fileName,
-      fileType: input.fileType,
-    },
+  const [proof] = await prisma.$transaction([
+    prisma.paymentProof.create({
+      data: { bookingId, uploadedBy: actor.userId, fileUrl: input.fileUrl, fileName: input.fileName, fileType: input.fileType },
+    }),
+    ...(booking.paymentStatus === 'UNPAID'
+      ? [prisma.booking.update({ where: { id: bookingId }, data: { paymentStatus: 'PENDING' } })]
+      : []),
+  ])
+
+  void notifyPaymentProofSubmitted(booking, proof).catch((error) => {
+    console.error('[payment.service] Failed to send payment-proof notification emails:', error)
   })
 
   return {
@@ -101,6 +112,35 @@ export async function addPaymentProof(
     fileType: proof.fileType,
     createdAt: proof.createdAt,
   }
+}
+
+async function notifyPaymentProofSubmitted(
+  booking: { id: number; tourId: number; userId: number; tourNameSnapshot: string; bookingDate: Date; paymentMethodId: number | null },
+  proof: { fileUrl: string; createdAt: Date },
+): Promise<void> {
+  const [tour, customer, staff, paymentMethod] = await Promise.all([
+    prisma.tour.findUnique({ where: { id: booking.tourId }, include: { guide: { include: { user: true } } } }),
+    prisma.user.findUnique({ where: { userId: booking.userId } }),
+    prisma.user.findMany({ where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] }, isActive: true } }),
+    booking.paymentMethodId ? prisma.paymentMethod.findUnique({ where: { id: booking.paymentMethodId } }) : null,
+  ])
+
+  const recipients = new Set<string>(staff.map((u) => u.email))
+  if (tour?.guide?.user.email) recipients.add(tour.guide.user.email)
+  if (recipients.size === 0) return
+
+  await sendPaymentProofSubmittedEmail({
+    recipients: [...recipients],
+    bookingId: booking.id,
+    tourName: booking.tourNameSnapshot,
+    bookingDate: booking.bookingDate.toISOString().slice(0, 10),
+    customerName: customer?.fullName ?? 'Customer',
+    customerEmail: customer?.email ?? 'unknown',
+    paymentMethodName: paymentMethod?.name ?? null,
+    proofUrl: proof.fileUrl,
+    submittedAt: proof.createdAt.toISOString(),
+    status: 'PAYMENT_SUBMITTED',
+  })
 }
 
 export async function listPaymentProofs(actor: Actor, bookingId: number) {

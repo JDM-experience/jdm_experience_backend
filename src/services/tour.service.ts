@@ -262,6 +262,36 @@ export async function removeTourImage(tourId: number, imageId: number): Promise<
   await prisma.tourImage.delete({ where: { id: imageId } })
 }
 
+// Ownership (SUPER_ADMIN/ADMIN: any tour; TOUR_GUIDE: only their own) is already enforced by the
+// verifyTourAssignment middleware on these routes (tours.routes.ts) before either function below
+// ever runs -- no need to re-check it here.
+
+export async function getTourContact(tourId: number) {
+  const tour = await prisma.tour.findUnique({ where: { id: tourId } })
+  if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
+  return { contactName: tour.contactName, contactEmail: tour.contactEmail, contactPhone: tour.contactPhone }
+}
+
+export async function updateTourContact(
+  actor: Actor,
+  tourId: number,
+  input: { contactName?: string; contactEmail?: string; contactPhone?: string },
+) {
+  const tour = await prisma.tour.findUnique({ where: { id: tourId } })
+  if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
+
+  const updated = await prisma.tour.update({
+    where: { id: tourId },
+    data: {
+      contactName: input.contactName,
+      contactEmail: input.contactEmail,
+      contactPhone: input.contactPhone,
+    },
+  })
+  await recordAuditLog({ userId: actor.userId, action: 'tour.contact_update', entity: 'tours', entityId: tourId })
+  return { contactName: updated.contactName, contactEmail: updated.contactEmail, contactPhone: updated.contactPhone }
+}
+
 /** Which future dates already have a CONFIRMED booking (and so can't be booked again) — powers
  *  the customer-facing date picker's disabled-dates list. See booking.service.ts for the same
  *  invariant enforced authoritatively at booking-create/confirm time. */

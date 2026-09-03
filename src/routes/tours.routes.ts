@@ -3,6 +3,7 @@ import {
   bookedDates,
   confirm,
   create,
+  getContact,
   getOne,
   list,
   listGuides,
@@ -10,6 +11,7 @@ import {
   remove,
   removeImage,
   update,
+  updateContact,
 } from '../controllers/tour.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole, verifyTourAssignment } from '../middleware/rbac'
@@ -21,6 +23,8 @@ import {
   createTourSchema,
   deleteTourImageResponseSchema,
   deleteTourResponseSchema,
+  tourContactResponseSchema,
+  tourContactSchema,
   tourGuidesListResponseSchema,
   tourImageResponseSchema,
   tourListQuerySchema,
@@ -160,6 +164,36 @@ export const toursRoutes: RouteDefinition[] = [
       400: { description: 'id was not a positive integer.', schema: apiErrorResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not staff or the assigned guide, or a guide tried to change status/guideId.', schema: apiErrorResponseSchema },
+      404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+    },
+  },
+  // Customer-facing contact info shown after a CONFIRMED booking (see booking.service.ts's
+  // confirmation email). SUPER_ADMIN/ADMIN: any tour; TOUR_GUIDE: only their own tour.
+  {
+    method: 'get',
+    path: '/tours/:id/contact',
+    handler: [...staffOrOwnGuide, getContact],
+    summary: "Get a tour's customer-facing contact info",
+    responses: {
+      200: { description: 'The contact info (fields are null until ever set).', schema: tourContactResponseSchema },
+      400: { description: 'id was not a positive integer.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
+      404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'put',
+    path: '/tours/:id/contact',
+    handler: [...staffOrOwnGuide, validateBody(tourContactSchema), updateContact],
+    summary: "Update a tour's customer-facing contact info",
+    request: { body: tourContactSchema },
+    responses: {
+      200: { description: 'Contact info updated.', schema: tourContactResponseSchema },
+      400: { description: 'id was not a positive integer.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
       404: { description: 'No tour with that id.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },

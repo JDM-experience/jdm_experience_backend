@@ -5,6 +5,7 @@ import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
 import { customersRoutes } from './customers.routes'
 import { healthRoutes } from './health.routes'
+import { paymentMethodsRoutes } from './paymentMethods.routes'
 import { paymentsRoutes } from './payments.routes'
 import type { RouteDefinition } from './route-definition'
 import { settingsRoutes } from './settings.routes'
@@ -26,6 +27,7 @@ export const allRoutes: RouteDefinition[] = [
   ...uploadsRoutes,
   ...bookingsRoutes,
   ...paymentsRoutes,
+  ...paymentMethodsRoutes,
   ...customersRoutes,
 ]
 
