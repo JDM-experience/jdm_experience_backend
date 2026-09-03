@@ -14,20 +14,27 @@ export const bookingsRoutes: RouteDefinition[] = [
     method: 'post',
     path: '/bookings',
     handler: [requireAuth, validateBody(createBookingSchema), create],
-    summary: 'Create a booking',
+    summary: 'Create a booking (checkout) -- contact info, payment method, and payment proof required',
     description:
-      'Re-validates the JST same-day cutoff, the tour\'s seat cap, and that the date has no ' +
-      'CONFIRMED booking yet. A tour-date is exclusive to one CONFIRMED booking at a time, but ' +
-      'two PENDING requests for the same date may coexist until staff confirms one (see PUT ' +
-      '/bookings/:id) — see GET /tours/:tourId/booked-dates for the customer-facing disabled-dates list.',
+      'The checkout page\'s final submit -- creates the Booking and its first PaymentProof together ' +
+      'in one transaction (paymentStatus starts at PENDING, never a proof-less UNPAID row), then ' +
+      'notifies SUPER_ADMIN/ADMIN/the tour owner. Re-validates the JST same-day cutoff, the tour\'s ' +
+      'seat cap, that the date has no CONFIRMED booking yet, and that paymentMethodId is still a ' +
+      'real, active payment method (never trusts what the checkout page showed the customer -- it ' +
+      'may have been disabled/deleted since). A tour-date is exclusive to one CONFIRMED booking at ' +
+      'a time, but two PENDING requests for the same date may coexist until staff confirms one (see ' +
+      'PUT /bookings/:id) — see GET /tours/:tourId/booked-dates for the customer-facing disabled-dates list.',
     request: { body: createBookingSchema },
     responses: {
       201: { description: 'Booking created.', schema: bookingResponseSchema },
-      400: { description: 'Booking closed for today, or participants exceeds the tour\'s seats.', schema: apiErrorResponseSchema },
+      400: {
+        description: "Booking closed for today, participants exceeds the tour's seats, or the payment method is no longer available.",
+        schema: apiErrorResponseSchema,
+      },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       404: { description: 'Tour not available for booking.', schema: apiErrorResponseSchema },
       409: { description: 'This date is already booked (CONFIRMED) for this tour.', schema: apiErrorResponseSchema },
-      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed (missing contact info, payment method, or payment proof).', schema: apiErrorResponseSchema },
     },
   },
   {

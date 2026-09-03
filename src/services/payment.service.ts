@@ -114,7 +114,10 @@ export async function addPaymentProof(
   }
 }
 
-async function notifyPaymentProofSubmitted(
+/** Exported for reuse by booking.service.ts's createBooking, which now creates the Booking and
+ *  its first PaymentProof together (checkout requires proof up front) rather than as two
+ *  separate calls -- same notification, same recipients, just triggered from a different place. */
+export async function notifyPaymentProofSubmitted(
   booking: { id: number; tourId: number; userId: number; tourNameSnapshot: string; bookingDate: Date; paymentMethodId: number | null },
   proof: { fileUrl: string; createdAt: Date },
 ): Promise<void> {

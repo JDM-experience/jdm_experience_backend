@@ -6,18 +6,25 @@ const paymentStatusEnum = z.enum(['UNPAID', 'PENDING', 'PAID', 'FAILED', 'REFUND
 // No `bookingTime` field, deliberately — customers select a date only. No `deliveryAddress`
 // either — a reservation has no shipping component; contact info below is how the customer and
 // tour owner reach each other, not a shipping destination.
+//
+// Contact info, payment method, and payment proof are all required -- the checkout page is the
+// one place a reservation is created, and it collects all of this before the customer can
+// confirm (see tour.controller.ts's createBooking, which creates the Booking + PaymentProof
+// together in one transaction rather than as two separate calls).
 export const createBookingSchema = z.object({
   tourId: z.number().int().positive(),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'bookingDate must be in YYYY-MM-DD format.'),
   participants: z.number().int().positive().default(1),
   specialRequests: z.string().trim().max(2000).optional(),
-  // Contact info captured at booking time, and the customer's chosen payment method -- both
-  // optional so existing callers/tests that don't send them still work, but the checkout flow
-  // always sends them.
-  customerName: z.string().trim().min(1).max(150).optional(),
-  customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address.').optional(),
-  customerPhone: z.string().trim().min(1).max(50).optional(),
-  paymentMethodId: z.number().int().positive().optional(),
+  customerName: z.string().trim().min(1, 'Full name is required.').max(150),
+  customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address.'),
+  customerPhone: z.string().trim().min(1, 'Phone number is required.').max(50),
+  paymentMethodId: z.number().int().positive(),
+  paymentProof: z.object({
+    fileUrl: z.string().trim().min(1, 'Payment proof is required.').max(500),
+    fileName: z.string().trim().min(1).max(255),
+    fileType: z.string().trim().min(1).max(50),
+  }),
 })
 
 export const updateBookingSchema = z

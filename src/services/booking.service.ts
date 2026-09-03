@@ -4,6 +4,7 @@ import { isBookingAllowed } from '../lib/dateTime'
 import { getBookingCutoffHour } from './settings.service'
 import { recordAuditLog } from './auditLog.service'
 import { sendBookingConfirmedEmail } from './email.service'
+import { notifyPaymentProofSubmitted } from './payment.service'
 import { Prisma, type BookingStatus, type PaymentStatus, type Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
@@ -42,6 +43,13 @@ function toPublicBooking(b: BookingWithRelations) {
  * but that exclusivity is enforced at *confirmation* time (see updateBookingStatus), not here: a
  * PENDING request doesn't block another customer from also requesting the same date, so two
  * PENDING requests for one date can coexist until staff confirms one of them.
+ *
+ * The checkout page is the only place a reservation is created, and it always has contact info,
+ * a payment method, and payment proof by the time the customer confirms — so all three are
+ * required here and created in the same transaction as the Booking itself, rather than as a
+ * separate follow-up call. None of it is trusted from the frontend at face value: the payment
+ * method is re-checked for existence/active status server-side regardless of what the client
+ * already showed the customer (it may have changed since the checkout page loaded).
  */
 export async function createBooking(
   actor: Actor,
@@ -50,10 +58,11 @@ export async function createBooking(
     bookingDate: string
     participants: number
     specialRequests?: string
-    customerName?: string
-    customerEmail?: string
-    customerPhone?: string
-    paymentMethodId?: number
+    customerName: string
+    customerEmail: string
+    customerPhone: string
+    paymentMethodId: number
+    paymentProof: { fileUrl: string; fileName: string; fileType: string }
   },
 ) {
   const cutoffHour = await getBookingCutoffHour()
@@ -80,32 +89,55 @@ export async function createBooking(
     throw new ApiError(409, 'This date is already booked for this tour. Please choose another date.')
   }
 
-  if (input.paymentMethodId !== undefined) {
-    const method = await prisma.paymentMethod.findUnique({ where: { id: input.paymentMethodId } })
-    if (!method || !method.isActive) throw new ApiError(400, 'Invalid or inactive payment method.')
+  // Re-checked here regardless of what the checkout page already showed the customer -- an Admin
+  // may have disabled/deleted the method in the meantime.
+  const method = await prisma.paymentMethod.findUnique({ where: { id: input.paymentMethodId } })
+  if (!method || !method.isActive) {
+    throw new ApiError(400, 'This payment method is no longer available. Please select another payment method.')
   }
 
-  const booking = await prisma.booking.create({
-    data: {
-      userId: actor.userId,
-      tourId: tour.id,
-      // bookingDate is a bare DATE column — store the calendar date the customer picked
-      // literally, no timezone offset math needed since it's not compared against an instant.
-      bookingDate,
-      participants: input.participants,
-      status: 'PENDING',
-      totalPrice: Number(tour.price) * input.participants,
-      paymentStatus: 'UNPAID',
-      tourNameSnapshot: tour.name,
-      unitPriceSnapshot: tour.price,
-      currency: tour.currency ?? 'JPY',
-      specialRequests: input.specialRequests,
-      customerName: input.customerName,
-      customerEmail: input.customerEmail,
-      customerPhone: input.customerPhone,
-      paymentMethodId: input.paymentMethodId,
-    },
-    include: BOOKING_INCLUDE,
+  // Interactive transaction (not the array form) -- the proof's bookingId depends on the id the
+  // booking create just generated, which the array form of $transaction can't reference.
+  const [booking, proof] = await prisma.$transaction(async (tx) => {
+    const createdBooking = await tx.booking.create({
+      data: {
+        userId: actor.userId,
+        tourId: tour.id,
+        // bookingDate is a bare DATE column — store the calendar date the customer picked
+        // literally, no timezone offset math needed since it's not compared against an instant.
+        bookingDate,
+        participants: input.participants,
+        status: 'PENDING',
+        totalPrice: Number(tour.price) * input.participants,
+        // Proof arrives in the same request that creates the booking, so it's already
+        // "submitted, awaiting review" from the very first moment it exists -- never a
+        // momentarily-UNPAID row with no proof attached.
+        paymentStatus: 'PENDING',
+        tourNameSnapshot: tour.name,
+        unitPriceSnapshot: tour.price,
+        currency: tour.currency ?? 'JPY',
+        specialRequests: input.specialRequests,
+        customerName: input.customerName,
+        customerEmail: input.customerEmail,
+        customerPhone: input.customerPhone,
+        paymentMethodId: input.paymentMethodId,
+      },
+      include: BOOKING_INCLUDE,
+    })
+    const createdProof = await tx.paymentProof.create({
+      data: {
+        bookingId: createdBooking.id,
+        uploadedBy: actor.userId,
+        fileUrl: input.paymentProof.fileUrl,
+        fileName: input.paymentProof.fileName,
+        fileType: input.paymentProof.fileType,
+      },
+    })
+    return [createdBooking, createdProof] as const
+  })
+
+  void notifyPaymentProofSubmitted(booking, proof).catch((error) => {
+    console.error('[booking.service] Failed to send payment-proof notification emails:', error)
   })
 
   return toPublicBooking(booking)
