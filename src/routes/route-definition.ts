@@ -25,6 +25,15 @@ export interface RouteDefinition {
     body?: ZodType
   }
   responses: Record<number, ResponseDef>
+  /** OpenAPI tag(s) — Swagger UI groups/collapses endpoints by these. Usually set once per
+   *  resource via `withTag()` in routes/index.ts rather than per route. */
+  tags?: string[]
+}
+
+/** Stamps every route in `routes` with `tag` — one call per resource in routes/index.ts groups
+ *  that resource's endpoints under a single collapsible section in Swagger UI. */
+export function withTag(tag: string, routes: RouteDefinition[]): RouteDefinition[] {
+  return routes.map((route) => ({ ...route, tags: [tag] }))
 }
 
 /** '/client/:id' -> '/api/client/{id}' — Express param syntax to OpenAPI's. */

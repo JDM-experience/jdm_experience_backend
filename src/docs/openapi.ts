@@ -20,6 +20,7 @@ for (const route of allRoutes) {
   registry.registerPath({
     method: route.method,
     path: toOpenApiPath(route.path),
+    tags: route.tags,
     summary: route.summary,
     description: route.description,
     request: route.request
@@ -47,5 +48,21 @@ export const openApiDocument = generator.generateDocument({
   servers: [
     { url: 'http://localhost:3000', description: 'Local dev' },
     { url: 'https://jdm-experience-backend-one.vercel.app', description: 'Production' },
+  ],
+  // Declared explicitly (rather than left to Swagger UI to infer) so groups appear in this
+  // order regardless of where each resource's routes happen to sit in allRoutes.
+  tags: [
+    { name: 'Health', description: 'Liveness/readiness check.' },
+    { name: 'Client', description: 'Public-facing client-info endpoints.' },
+    { name: 'Auth', description: 'Auth0 token verification and the authenticated user profile.' },
+    { name: 'Users', description: 'User account management.' },
+    { name: 'Settings', description: 'Site-wide settings.' },
+    { name: 'Contact Messages', description: 'Public contact form + staff inbox.' },
+    { name: 'Tours', description: 'Tours, their images, guides, and booked dates.' },
+    { name: 'Uploads', description: 'Signed upload URLs for tour images (Supabase Storage).' },
+    { name: 'Bookings', description: 'Customer bookings.' },
+    { name: 'Payments', description: 'Payment records for bookings.' },
+    { name: 'Payment Methods', description: 'Configured payment methods for checkout.' },
+    { name: 'Customers', description: 'Customer accounts (staff view).' },
   ],
 })
