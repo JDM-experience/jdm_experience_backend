@@ -175,8 +175,10 @@ export async function listBookings(actor: Actor) {
  * Status transitions reuse the existing BookingStatus/PaymentStatus enums rather than adding new
  * values (avoids a second, overlapping status concept): "payment submitted" is
  * paymentStatus=PENDING (set in payment.service.ts's addPaymentProof), "confirmed" is
- * status=CONFIRMED (this function, staff-only), "rejected" is status=CANCELLED +
- * paymentStatus=FAILED (also this function).
+ * status=CONFIRMED + paymentStatus=PAID together (this function, staff-only, enforced below --
+ * confirming a booking *is* the payment verification, the two can never move independently), and
+ * "rejected" is status=CANCELLED + paymentStatus=FAILED (also enforced below, not left to the
+ * caller to remember to send both).
  *
  * Uploading payment proof never confirms a booking by itself -- only an explicit CONFIRMED
  * transition here does, and only after re-checking per-date exclusivity inside the transaction.
@@ -189,25 +191,55 @@ export async function updateBookingStatus(
   input: { status?: BookingStatus; paymentStatus?: PaymentStatus },
 ) {
   const updated = await prisma.$transaction(async (tx) => {
-    const existing = await tx.booking.findUnique({ where: { id } })
+    const existing = await tx.booking.findUnique({ where: { id }, include: { paymentProofs: true } })
     if (!existing) throw new ApiError(404, 'Booking not found.')
 
-    // This is where per-date exclusivity is actually enforced (createBooking only rejects a
-    // *new* request against an already-CONFIRMED date; two PENDING requests for the same date
-    // are allowed to coexist until one is confirmed). Guarded by the transaction so confirming
-    // two competing PENDING bookings for the same date concurrently can't both succeed.
-    if (input.status === 'CONFIRMED' && existing.status !== 'CONFIRMED') {
+    let paymentStatus = input.paymentStatus
+
+    if (input.status === 'CONFIRMED') {
+      // Prevents a duplicate confirm action from re-running this whole block (and re-sending the
+      // confirmation email) against a booking that's already confirmed.
+      if (existing.status === 'CONFIRMED') {
+        throw new ApiError(400, 'This booking is already confirmed.')
+      }
+      // Confirming without proof would mean marking a payment "verified" that staff never
+      // actually saw -- createBooking always attaches one up front, but this guards any
+      // booking (including ones that pre-date that requirement) regardless.
+      if (existing.paymentProofs.length === 0) {
+        throw new ApiError(400, 'This booking has no payment proof and cannot be confirmed.')
+      }
+
+      // This is where per-date exclusivity is actually enforced (createBooking only rejects a
+      // *new* request against an already-CONFIRMED date; two PENDING requests for the same date
+      // are allowed to coexist until one is confirmed). Guarded by the transaction so confirming
+      // two competing PENDING bookings for the same date concurrently can't both succeed.
       const conflicting = await tx.booking.findFirst({
         where: { tourId: existing.tourId, bookingDate: existing.bookingDate, status: 'CONFIRMED', id: { not: id } },
       })
       if (conflicting) {
         throw new ApiError(409, 'Another booking for this tour and date is already confirmed.')
       }
+
+      // The invariant this whole fix exists for: a CONFIRMED booking can never be left showing
+      // paymentStatus=PENDING (or anything else the caller might have sent/forgotten to send).
+      paymentStatus = 'PAID'
+    }
+
+    if (input.status === 'CANCELLED') {
+      if (existing.status === 'CANCELLED') {
+        throw new ApiError(400, 'This booking is already cancelled.')
+      }
+      // Rejecting a submitted payment: mark it FAILED unless the caller explicitly asked for a
+      // different terminal value (e.g. REFUNDED for cancelling an already-paid booking) or it's
+      // already sitting at one.
+      if (paymentStatus === undefined && existing.paymentStatus !== 'PAID' && existing.paymentStatus !== 'REFUNDED') {
+        paymentStatus = 'FAILED'
+      }
     }
 
     return tx.booking.update({
       where: { id },
-      data: { status: input.status, paymentStatus: input.paymentStatus },
+      data: { status: input.status, paymentStatus },
       include: BOOKING_INCLUDE,
     })
   })

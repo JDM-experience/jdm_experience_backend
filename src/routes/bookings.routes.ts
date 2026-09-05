@@ -82,11 +82,20 @@ export const bookingsRoutes: RouteDefinition[] = [
     ],
     summary: 'Update a booking’s status/paymentStatus',
     description:
-      'Setting status to CONFIRMED is where per-date exclusivity is actually enforced: rejected ' +
-      'if another booking on the same tour+date is already CONFIRMED.',
+      'Setting status to CONFIRMED always sets paymentStatus to PAID in the same update, ' +
+      'regardless of what paymentStatus (if anything) was sent -- a booking can never be left ' +
+      'CONFIRMED with a stale/PENDING paymentStatus. Requires at least one payment proof to exist ' +
+      'and rejects an already-CONFIRMED booking (no duplicate confirmations/emails). Setting status ' +
+      'to CANCELLED defaults paymentStatus to FAILED unless the booking was already PAID/REFUNDED ' +
+      'or a different paymentStatus was explicitly provided. This is also where per-date ' +
+      'exclusivity is enforced: rejected if another booking on the same tour+date is already CONFIRMED.',
     request: { body: updateBookingSchema },
     responses: {
       200: { description: 'Booking updated.', schema: bookingResponseSchema },
+      400: {
+        description: 'Already confirmed/cancelled, or confirming a booking with no payment proof.',
+        schema: apiErrorResponseSchema,
+      },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
       404: { description: 'No booking with that id.', schema: apiErrorResponseSchema },
