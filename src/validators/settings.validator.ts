@@ -1,6 +1,17 @@
 import { z } from 'zod'
 
-const platformEnum = z.enum(['FACEBOOK', 'INSTAGRAM', 'TIKTOK'])
+const platformEnum = z.enum(['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'TWITTER', 'YOUTUBE'])
+const policyTypeEnum = z.enum(['PRIVACY', 'TERMS', 'BOOKING', 'CANCELLATION', 'PAYMENT', 'CONDUCT'])
+
+// A social link is only ever meant to be clicked out to the platform itself -- reject anything
+// that isn't a plain http(s) URL (blocks javascript:/data: schemes even though they'd otherwise
+// pass z.string().url()'s generic URL-syntax check).
+const httpUrl = z
+  .string()
+  .trim()
+  .url('Enter a valid URL.')
+  .max(500)
+  .refine((v) => /^https?:\/\//i.test(v), 'URL must start with http:// or https://')
 
 export const updateContactSettingsSchema = z
   .object({
@@ -13,20 +24,36 @@ export const updateContactSettingsSchema = z
 
 export const createSocialLinkSchema = z.object({
   platform: platformEnum,
-  url: z.string().trim().url('Enter a valid URL.').max(500),
+  url: httpUrl,
   enabled: z.boolean().default(true),
   displayOrder: z.number().int().nonnegative().default(0),
 })
 
 export const updateSocialLinkSchema = z
   .object({
-    url: z.string().trim().url('Enter a valid URL.').max(500).optional(),
+    url: httpUrl.optional(),
     enabled: z.boolean().optional(),
     displayOrder: z.number().int().nonnegative().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
 export const socialLinkIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+
+export const updateAboutContentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    content: z.string().trim().min(1).max(20000).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
+
+export const policyTypeParamSchema = z.object({ type: policyTypeEnum })
+
+export const updatePolicySchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    content: z.string().trim().min(1).max(20000).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
 const contactSettingsSchema = z
   .object({
@@ -67,3 +94,30 @@ export const socialLinksListResponseSchema = z
 export const deleteSocialLinkResponseSchema = z
   .object({ success: z.literal(true), data: z.null() })
   .meta({ id: 'DeleteSocialLinkResponse' })
+
+const aboutContentSchema = z
+  .object({
+    title: z.string().meta({ example: 'About Our Tours' }),
+    content: z.string().meta({ example: '<p>Welcome to Japan JDM Experience...</p>' }),
+  })
+  .meta({ id: 'AboutContent' })
+
+export const aboutContentResponseSchema = z
+  .object({ success: z.literal(true), data: aboutContentSchema.nullable() })
+  .meta({ id: 'AboutContentResponse' })
+
+const policyPageSchema = z
+  .object({
+    type: policyTypeEnum.meta({ example: 'BOOKING' }),
+    title: z.string().meta({ example: 'Booking Policy' }),
+    content: z.string().meta({ example: '<ul><li>Reservations are first-come, first-served.</li></ul>' }),
+  })
+  .meta({ id: 'PolicyPage' })
+
+export const policyPageResponseSchema = z
+  .object({ success: z.literal(true), data: policyPageSchema })
+  .meta({ id: 'PolicyPageResponse' })
+
+export const policyPagesListResponseSchema = z
+  .object({ success: z.literal(true), data: z.array(policyPageSchema) })
+  .meta({ id: 'PolicyPagesListResponse' })

@@ -106,6 +106,17 @@ enum SocialPlatform {
   FACEBOOK
   INSTAGRAM
   TIKTOK
+  TWITTER
+  YOUTUBE
+}
+
+enum PolicyType {
+  PRIVACY
+  TERMS
+  BOOKING
+  CANCELLATION
+  PAYMENT
+  CONDUCT
 }
 
 /// Guide-specific profile extension for TOUR_GUIDE users. Identity/login lives on `User`.
@@ -316,6 +327,30 @@ model SocialMediaLink {
 
   @@index([enabled])
   @@map("social_media_links")
+}
+
+/** Single global row (id=1), same pattern as AppSettings -- the public About Us page's title +
+ *  body, editable from Website Settings instead of hardcoded in React. */
+model AboutContent {
+  id        Int      @id
+  title     String
+  content   String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("about_content")
+}
+
+/** One row per policy type (Privacy, Terms, Booking, Cancellation, Payment, Conduct) -- a type
+ *  with no row (or empty content) is simply not shown on the public Policy page, mirroring how an
+ *  unset social media link hides its icon rather than showing a blank/broken section. */
+model PolicyPage {
+  id        Int        @id @default(autoincrement())
+  type      PolicyType @unique
+  title     String
+  content   String
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  @@map("policy_pages")
 }
 
 model AuditLog {

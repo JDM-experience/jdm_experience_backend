@@ -1,12 +1,19 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as settingsService from '../services/settings.service'
-import { socialLinkIdParamSchema } from '../validators/settings.validator'
+import { policyTypeParamSchema, socialLinkIdParamSchema } from '../validators/settings.validator'
+import type { PolicyType } from '../generated/prisma/client'
 
 function parseSocialLinkId(req: Request): number {
   const parsed = socialLinkIdParamSchema.safeParse(req.params)
   if (!parsed.success) throw new ApiError(400, 'id must be a positive integer.')
   return parsed.data.id
+}
+
+function parsePolicyType(req: Request): PolicyType {
+  const parsed = policyTypeParamSchema.safeParse(req.params)
+  if (!parsed.success) throw new ApiError(400, 'type must be a valid policy type.')
+  return parsed.data.type
 }
 
 export async function getContact(req: Request, res: Response, next: NextFunction) {
@@ -55,6 +62,47 @@ export async function deleteSocialLink(req: Request, res: Response, next: NextFu
   try {
     await settingsService.deleteSocialLink(req.user!, parseSocialLinkId(req))
     res.json({ success: true, data: null })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function getAbout(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await settingsService.getAboutContent() })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function updateAbout(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await settingsService.updateAboutContent(req.user!, req.body) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function listPolicies(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await settingsService.listPolicies() })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function getPolicyForAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await settingsService.getPolicyForAdmin(parsePolicyType(req)) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function updatePolicy(req: Request, res: Response, next: NextFunction) {
+  try {
+    const policy = await settingsService.updatePolicy(req.user!, parsePolicyType(req), req.body)
+    res.json({ success: true, data: policy })
   } catch (error) {
     next(error)
   }

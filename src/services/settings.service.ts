@@ -1,9 +1,10 @@
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
 import { recordAuditLog } from './auditLog.service'
-import type { Role, SocialPlatform } from '../generated/prisma/client'
+import type { PolicyType, Role, SocialPlatform } from '../generated/prisma/client'
 
 const SETTINGS_ID = 1
+const ABOUT_ID = 1
 
 type Actor = { userId: number; role: Role }
 
@@ -123,4 +124,64 @@ export async function deleteSocialLink(actor: Actor, id: number): Promise<void> 
     entity: 'social_media_links',
     entityId: id,
   })
+}
+
+/** Single global row (id=1), same singleton pattern as app_settings -- the public About Us
+ *  page's title/body, editable from Website Settings instead of hardcoded in React. */
+export async function getAboutContent() {
+  const row = await prisma.aboutContent.findUnique({ where: { id: ABOUT_ID } })
+  if (!row) return null
+  return { title: row.title, content: row.content }
+}
+
+export async function updateAboutContent(actor: Actor, input: { title?: string; content?: string }) {
+  const row = await prisma.aboutContent.upsert({
+    where: { id: ABOUT_ID },
+    create: { id: ABOUT_ID, title: input.title ?? 'About Us', content: input.content ?? '' },
+    update: { title: input.title, content: input.content },
+  })
+
+  await recordAuditLog({
+    userId: actor.userId,
+    action: 'settings.about_update',
+    entity: 'about_content',
+    entityId: ABOUT_ID,
+  })
+  return { title: row.title, content: row.content }
+}
+
+function toPublicPolicyPage(row: { type: PolicyType; title: string; content: string }) {
+  return { type: row.type, title: row.title, content: row.content }
+}
+
+/** A policy type with no row, or empty content, is simply omitted here -- the public Policy page
+ *  only renders what an admin has actually written, mirroring how an unset social link hides its
+ *  icon instead of rendering an empty/broken section. */
+export async function listPolicies() {
+  const rows = await prisma.policyPage.findMany({ where: { content: { not: '' } }, orderBy: { type: 'asc' } })
+  return rows.map(toPublicPolicyPage)
+}
+
+export async function updatePolicy(actor: Actor, type: PolicyType, input: { title?: string; content?: string }) {
+  const row = await prisma.policyPage.upsert({
+    where: { type },
+    create: { type, title: input.title ?? type, content: input.content ?? '' },
+    update: { title: input.title, content: input.content },
+  })
+
+  await recordAuditLog({
+    userId: actor.userId,
+    action: 'settings.policy_update',
+    entity: 'policy_pages',
+    entityId: row.id,
+  })
+  return toPublicPolicyPage(row)
+}
+
+/** Staff-only read (unlike listPolicies, which the public Policy page uses) -- the admin editor
+ *  needs to see a type's current title/content even if content is still empty/unset. */
+export async function getPolicyForAdmin(type: PolicyType) {
+  const row = await prisma.policyPage.findUnique({ where: { type } })
+  if (!row) return { type, title: type, content: '' }
+  return toPublicPolicyPage(row)
 }
