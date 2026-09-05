@@ -28,6 +28,22 @@ export async function findOrCreateFromAuth0(identity: { sub: string; email: stri
 
 type Actor = { userId: number; role: Role }
 
+/**
+ * A User's `role` alone doesn't make them assignable to a tour — Tour.guideId points at a
+ * TourGuide *profile* row (phone/bio/active), not a User directly (see schema.prisma). Without
+ * this, promoting someone to TOUR_GUIDE (here, or by editing their role) left them with no way to
+ * ever be assigned a tour: GET /tours/guides only lists rows from this table, and createTour's
+ * own TOUR_GUIDE auto-assignment looks the profile up the same way. Idempotent -- safe to call
+ * even if a profile already exists.
+ */
+async function ensureTourGuideProfile(userId: number): Promise<void> {
+  await prisma.tourGuide.upsert({
+    where: { userId },
+    create: { userId },
+    update: {},
+  })
+}
+
 export async function listUsers(filter?: { role?: Role }): Promise<PublicUser[]> {
   const users = await prisma.user.findMany({ where: filter?.role ? { role: filter.role } : undefined, orderBy: { userId: 'asc' } })
   return users.map(toPublicUser)
@@ -53,6 +69,10 @@ export async function createUser(
     data: { fullName: input.fullName, email: input.email, role: input.role },
   })
 
+  if (input.role === 'TOUR_GUIDE') {
+    await ensureTourGuideProfile(user.userId)
+  }
+
   await recordAuditLog({
     userId: actor.userId,
     action: 'user.create',
@@ -76,6 +96,10 @@ export async function updateUser(
     where: { userId: targetId },
     data: { fullName: input.fullName, email: input.email, role: input.role, isActive: input.isActive },
   })
+
+  if (input.role === 'TOUR_GUIDE') {
+    await ensureTourGuideProfile(targetId)
+  }
 
   if (input.role && input.role !== target.role) {
     await recordAuditLog({
