@@ -88,12 +88,14 @@ export const bookingsRoutes: RouteDefinition[] = [
       'and rejects an already-CONFIRMED booking (no duplicate confirmations/emails). Setting status ' +
       'to CANCELLED defaults paymentStatus to FAILED unless the booking was already PAID/REFUNDED ' +
       'or a different paymentStatus was explicitly provided. This is also where per-date ' +
-      'exclusivity is enforced: rejected if another booking on the same tour+date is already CONFIRMED.',
+      'exclusivity is enforced: rejected if another booking on the same tour+date is already CONFIRMED. ' +
+      'Setting status to COMPLETED is only allowed from CONFIRMED (the tour was actually run and paid ' +
+      'for) -- rejected otherwise.',
     request: { body: updateBookingSchema },
     responses: {
       200: { description: 'Booking updated.', schema: bookingResponseSchema },
       400: {
-        description: 'Already confirmed/cancelled, or confirming a booking with no payment proof.',
+        description: 'Already confirmed/cancelled, confirming a booking with no payment proof, or marking a non-CONFIRMED booking completed.',
         schema: apiErrorResponseSchema,
       },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },

@@ -237,6 +237,13 @@ export async function updateBookingStatus(
       }
     }
 
+    // A tour can only be marked complete once it was actually confirmed (and therefore paid) --
+    // never straight from PENDING/CANCELLED, which would leave a COMPLETED booking with no paid
+    // reservation behind it.
+    if (input.status === 'COMPLETED' && existing.status !== 'CONFIRMED') {
+      throw new ApiError(400, 'Only a confirmed booking can be marked completed.')
+    }
+
     return tx.booking.update({
       where: { id },
       data: { status: input.status, paymentStatus },
