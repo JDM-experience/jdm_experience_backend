@@ -57,6 +57,20 @@ export async function listReviewsForTour(tourId: number) {
   return { reviews: rows.map(toPublicReview), averageRating, totalCount }
 }
 
+/**
+ * The caller's own reviews across every tour, in one call -- lets a page listing several
+ * bookings (e.g. My Reservations) show "Leave a Review" vs "View Review" per booking without a
+ * separate GET /tours/:tourId/reviews call (and full review list) per tour.
+ */
+export async function listMyReviews(userId: number) {
+  const rows = await prisma.review.findMany({
+    where: { userId },
+    include: REVIEW_INCLUDE,
+    orderBy: { createdAt: 'desc' },
+  })
+  return rows.map(toPublicReview)
+}
+
 export async function getReview(id: number) {
   const row = await prisma.review.findUnique({ where: { id }, include: REVIEW_INCLUDE })
   if (!row) throw new ApiError(404, 'Review not found.')

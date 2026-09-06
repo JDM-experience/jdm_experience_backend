@@ -30,6 +30,10 @@ const reviewSchema = z
 
 export const reviewResponseSchema = z.object({ success: z.literal(true), data: reviewSchema }).meta({ id: 'ReviewResponse' })
 
+export const myReviewsListResponseSchema = z
+  .object({ success: z.literal(true), data: z.array(reviewSchema) })
+  .meta({ id: 'MyReviewsListResponse' })
+
 export const reviewsListResponseSchema = z
   .object({
     success: z.literal(true),

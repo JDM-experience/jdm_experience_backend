@@ -1,10 +1,11 @@
-import { create, getOne, listForTour, remove, update } from '../controllers/review.controller'
+import { create, getOne, listForTour, listMine, remove, update } from '../controllers/review.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { validateBody } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
 import {
   createReviewSchema,
   deleteReviewResponseSchema,
+  myReviewsListResponseSchema,
   reviewResponseSchema,
   reviewsListResponseSchema,
   updateReviewSchema,
@@ -42,6 +43,19 @@ export const reviewsRoutes: RouteDefinition[] = [
       404: { description: 'Tour not found.', schema: apiErrorResponseSchema },
       409: { description: 'A review by this user for this tour already exists.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'get',
+    path: '/reviews/mine',
+    handler: [requireAuth, listMine],
+    summary: "List the calling user's own reviews across every tour",
+    description:
+      'Lets a page listing several of the customer\'s bookings (e.g. My Reservations) show ' +
+      '"Leave a Review" vs "View Review" per booking without a separate call per tour.',
+    responses: {
+      200: { description: "The caller's reviews.", schema: myReviewsListResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
     },
   },
   {

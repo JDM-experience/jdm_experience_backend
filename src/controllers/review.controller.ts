@@ -23,6 +23,14 @@ export async function listForTour(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function listMine(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ success: true, data: await reviewService.listMyReviews(req.user!.userId) })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
     const review = await reviewService.createReview(req.user!, parseTourId(req), req.body)
