@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as bookingService from '../services/booking.service'
+import type { BookingListFilter } from '../services/booking.service'
 import { bookingIdParamSchema } from '../validators/booking.validator'
 
 function parseBookingId(req: Request): number {
@@ -20,7 +21,8 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 export async function myBookings(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json({ success: true, data: await bookingService.getMyBookings(req.user!.userId) })
+    const filter = req.query as unknown as BookingListFilter
+    res.json({ success: true, data: await bookingService.getMyBookings(req.user!.userId, filter) })
   } catch (error) {
     next(error)
   }
@@ -28,7 +30,17 @@ export async function myBookings(req: Request, res: Response, next: NextFunction
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json({ success: true, data: await bookingService.listBookings(req.user!) })
+    const filter = req.query as unknown as BookingListFilter
+    res.json({ success: true, data: await bookingService.listBookings(req.user!, filter) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function cancel(req: Request, res: Response, next: NextFunction) {
+  try {
+    const booking = await bookingService.cancelOwnBooking(req.user!, parseBookingId(req))
+    res.json({ success: true, data: booking })
   } catch (error) {
     next(error)
   }

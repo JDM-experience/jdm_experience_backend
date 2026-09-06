@@ -5,6 +5,7 @@ import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
 import { currencyRoutes } from './currency.routes'
 import { customersRoutes } from './customers.routes'
+import { dashboardRoutes } from './dashboard.routes'
 import { healthRoutes } from './health.routes'
 import { paymentMethodsRoutes } from './paymentMethods.routes'
 import { paymentsRoutes } from './payments.routes'
@@ -36,6 +37,7 @@ export const allRoutes: RouteDefinition[] = [
   ...withTag('Reviews', reviewsRoutes),
   ...withTag('Weather', weatherRoutes),
   ...withTag('Currency', currencyRoutes),
+  ...withTag('Dashboard', dashboardRoutes),
 ]
 
 const router = Router()

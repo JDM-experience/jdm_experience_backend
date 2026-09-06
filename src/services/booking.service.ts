@@ -143,8 +143,79 @@ export async function createBooking(
   return toPublicBooking(booking)
 }
 
-export async function getMyBookings(userId: number) {
-  const rows = await prisma.booking.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: BOOKING_INCLUDE })
+export interface BookingListFilter {
+  search?: string
+  status?: BookingStatus
+  paymentStatus?: PaymentStatus
+  tourId?: number
+  dateFrom?: string
+  dateTo?: string
+  sortBy?: 'createdAt' | 'bookingDate' | 'customerName' | 'tourName' | 'status' | 'paymentStatus' | 'totalPrice'
+  sortOrder?: 'asc' | 'desc'
+}
+
+// Whitelist mapping only -- never build `orderBy` from a raw client-supplied field name (see
+// bookingSortByEnum in booking.validator.ts, which is what actually constrains req.query.sortBy
+// before it ever reaches here). "tourName" maps onto the snapshot column since that's what's
+// actually sortable/searchable here, not a join to the live (and possibly since-edited) Tour row.
+const SORT_FIELD_MAP = {
+  createdAt: 'createdAt',
+  bookingDate: 'bookingDate',
+  customerName: 'customerName',
+  tourName: 'tourNameSnapshot',
+  status: 'status',
+  paymentStatus: 'paymentStatus',
+  totalPrice: 'totalPrice',
+} as const satisfies Record<string, keyof Prisma.BookingOrderByWithRelationInput>
+
+/** Shared by listBookings (staff) and getMyBookings (customer) -- role/ownership scoping is
+ *  applied by the caller on top of whatever `where` this returns, never overridable by filter. */
+function buildBookingWhere(filter?: BookingListFilter): Prisma.BookingWhereInput {
+  const where: Prisma.BookingWhereInput = {}
+  if (filter?.status) where.status = filter.status
+  if (filter?.paymentStatus) where.paymentStatus = filter.paymentStatus
+  if (filter?.tourId) where.tourId = filter.tourId
+
+  if (filter?.dateFrom || filter?.dateTo) {
+    where.bookingDate = {
+      ...(filter.dateFrom ? { gte: new Date(`${filter.dateFrom}T00:00:00.000Z`) } : {}),
+      ...(filter.dateTo ? { lte: new Date(`${filter.dateTo}T23:59:59.999Z`) } : {}),
+    }
+  }
+
+  if (filter?.search) {
+    const search = filter.search.trim()
+    // "JDM-19" or a bare "19" -- the reference format shown throughout the admin UI -- matches by
+    // exact id instead of a text search across it.
+    const idMatch = /^(?:jdm-)?(\d+)$/i.exec(search)
+    if (idMatch) {
+      where.id = Number(idMatch[1])
+    } else {
+      where.OR = [
+        { customerName: { contains: search, mode: 'insensitive' } },
+        { customerEmail: { contains: search, mode: 'insensitive' } },
+        { tourNameSnapshot: { contains: search, mode: 'insensitive' } },
+        { paymentMethod: { name: { contains: search, mode: 'insensitive' } } },
+      ]
+    }
+  }
+
+  return where
+}
+
+function buildBookingOrderBy(filter?: BookingListFilter): Prisma.BookingOrderByWithRelationInput {
+  if (!filter?.sortBy) return { createdAt: 'desc' }
+  return { [SORT_FIELD_MAP[filter.sortBy]]: filter.sortOrder ?? 'asc' }
+}
+
+/** Always scoped to the caller's own bookings -- `filter` can never widen this to another user's
+ *  data, regardless of what a customer sends in the query string. */
+export async function getMyBookings(userId: number, filter?: BookingListFilter) {
+  const rows = await prisma.booking.findMany({
+    where: { ...buildBookingWhere(filter), userId },
+    orderBy: buildBookingOrderBy(filter),
+    include: BOOKING_INCLUDE,
+  })
   return rows.map(toPublicBooking)
 }
 
@@ -155,20 +226,47 @@ export async function getBooking(id: number) {
 }
 
 /** SUPER_ADMIN/ADMIN see every booking; TOUR_GUIDE sees only bookings on their own tours. */
-export async function listBookings(actor: Actor) {
+export async function listBookings(actor: Actor, filter?: BookingListFilter) {
+  const where = buildBookingWhere(filter)
+  const orderBy = buildBookingOrderBy(filter)
+
   if (actor.role === 'TOUR_GUIDE') {
     const guide = await prisma.tourGuide.findUnique({ where: { userId: actor.userId } })
     if (!guide) return []
     const rows = await prisma.booking.findMany({
-      where: { tour: { guideId: guide.id } },
-      orderBy: { createdAt: 'desc' },
+      where: { ...where, tour: { guideId: guide.id } },
+      orderBy,
       include: BOOKING_INCLUDE,
     })
     return rows.map(toPublicBooking)
   }
 
-  const rows = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' }, include: BOOKING_INCLUDE })
+  const rows = await prisma.booking.findMany({ where, orderBy, include: BOOKING_INCLUDE })
   return rows.map(toPublicBooking)
+}
+
+/**
+ * Customer self-service cancellation -- deliberately its own function/endpoint rather than
+ * reusing the staff-only updateBookingStatus route, since the eligibility rule here is stricter
+ * and different in kind: only the booking's own customer (never staff, who already have the
+ * confirm/reject flow via PUT /bookings/:id), and only while it's still PENDING + UNPAID. Once
+ * proof has been submitted (paymentStatus moves to PENDING) it's under staff review and the
+ * customer can no longer unilaterally cancel it. Delegates the actual state change to
+ * updateBookingStatus so cancellation always follows the exact same CANCELLED-transition rules
+ * (paymentStatus -> FAILED, audit log) as the staff-initiated reject path.
+ */
+export async function cancelOwnBooking(actor: Actor, id: number) {
+  const existing = await prisma.booking.findUnique({ where: { id } })
+  if (!existing) throw new ApiError(404, 'Booking not found.')
+
+  if (existing.userId !== actor.userId) {
+    throw new ApiError(403, 'You are not authorized to cancel this booking.')
+  }
+  if (existing.status !== 'PENDING' || existing.paymentStatus !== 'UNPAID') {
+    throw new ApiError(400, 'Only pending, unpaid bookings can be cancelled.')
+  }
+
+  return updateBookingStatus(actor, id, { status: 'CANCELLED' })
 }
 
 /**

@@ -1,10 +1,16 @@
-import { create, getOne, list, myBookings, update } from '../controllers/booking.controller'
+import { cancel, create, getOne, list, myBookings, update } from '../controllers/booking.controller'
 import { addProof, listProofs } from '../controllers/payment.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole, verifyBookingOwnership } from '../middleware/rbac'
-import { validateBody } from '../middleware/validate'
+import { validateBody, validateQuery } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
-import { bookingResponseSchema, bookingsListResponseSchema, createBookingSchema, updateBookingSchema } from '../validators/booking.validator'
+import {
+  bookingListQuerySchema,
+  bookingResponseSchema,
+  bookingsListResponseSchema,
+  createBookingSchema,
+  updateBookingSchema,
+} from '../validators/booking.validator'
 import { paymentProofResponseSchema, paymentProofSchema, paymentProofsListResponseSchema } from '../validators/payment.validator'
 import type { RouteDefinition } from './route-definition'
 
@@ -40,22 +46,34 @@ export const bookingsRoutes: RouteDefinition[] = [
   {
     method: 'get',
     path: '/bookings/my-bookings',
-    handler: [requireAuth, myBookings],
+    handler: [requireAuth, validateQuery(bookingListQuerySchema), myBookings],
     summary: "List the calling user's own bookings",
+    description:
+      'Supports the same search/filter/sort query params as GET /bookings, always scoped to the ' +
+      'caller\'s own bookings regardless of what is passed -- a customer can never widen this to ' +
+      'another user\'s data.',
+    request: { query: bookingListQuerySchema },
     responses: {
-      200: { description: 'The caller\'s bookings, newest first.', schema: bookingsListResponseSchema },
+      200: { description: 'The caller\'s bookings, newest first by default.', schema: bookingsListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
   {
     method: 'get',
     path: '/bookings',
-    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'TOUR_GUIDE'), list],
+    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'TOUR_GUIDE'), validateQuery(bookingListQuerySchema), list],
     summary: 'List bookings (staff see all; a guide sees only their own tours’ bookings)',
+    description:
+      'search matches a "JDM-19"/"19" reference by exact id, else a case-insensitive match across ' +
+      'customer name/email, tour name, and payment method name. status, paymentStatus, tourId, ' +
+      'dateFrom/dateTo (on bookingDate), and sortBy/sortOrder all apply on top of that.',
+    request: { query: bookingListQuerySchema },
     responses: {
-      200: { description: 'Bookings, newest first.', schema: bookingsListResponseSchema },
+      200: { description: 'Bookings, newest first by default.', schema: bookingsListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not SUPER_ADMIN, ADMIN, or TOUR_GUIDE.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
   {
@@ -103,6 +121,26 @@ export const bookingsRoutes: RouteDefinition[] = [
       404: { description: 'No booking with that id.', schema: apiErrorResponseSchema },
       409: { description: 'Another booking for this tour and date is already CONFIRMED.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'patch',
+    path: '/bookings/:id/cancel',
+    handler: [requireAuth, cancel],
+    summary: 'Customer cancels their own booking',
+    description:
+      'Customer self-service only -- rejected for anyone but the booking\'s own userId, including ' +
+      'staff (who already have PUT /bookings/:id for confirm/reject). Only allowed while the ' +
+      'booking is still PENDING and paymentStatus is still UNPAID; once payment proof has been ' +
+      'submitted (paymentStatus moves to PENDING) it\'s under staff review and can no longer be ' +
+      'self-cancelled. Sets status to CANCELLED and paymentStatus to FAILED, same as the staff ' +
+      'reject path.',
+    responses: {
+      200: { description: 'Booking cancelled.', schema: bookingResponseSchema },
+      400: { description: 'Booking is not PENDING + UNPAID.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not this booking\'s own customer.', schema: apiErrorResponseSchema },
+      404: { description: 'No booking with that id.', schema: apiErrorResponseSchema },
     },
   },
   // Ownership (staff or the booking's own customer) is enforced inside payment.service.ts.

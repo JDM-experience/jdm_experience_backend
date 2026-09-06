@@ -33,6 +33,26 @@ export const updateBookingSchema = z
 
 export const bookingIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 
+const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be in YYYY-MM-DD format.')
+
+// Whitelisted sort fields only -- never build Prisma `orderBy` from a raw client-supplied field
+// name (same discipline as tour.validator.ts's sortBy enum).
+export const bookingSortByEnum = z.enum(['createdAt', 'bookingDate', 'customerName', 'tourName', 'status', 'paymentStatus', 'totalPrice'])
+
+// Shared by GET /bookings (staff) and GET /bookings/my-bookings (customer) -- the customer route's
+// controller always ANDs in the caller's own userId regardless of what's in this query, so a
+// customer can never widen these params into someone else's bookings.
+export const bookingListQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  status: bookingStatusEnum.optional(),
+  paymentStatus: paymentStatusEnum.optional(),
+  tourId: z.coerce.number().int().positive().optional(),
+  dateFrom: dateOnly.optional(),
+  dateTo: dateOnly.optional(),
+  sortBy: bookingSortByEnum.optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+})
+
 const bookingSchema = z
   .object({
     id: z.number().meta({ example: 1 }),
