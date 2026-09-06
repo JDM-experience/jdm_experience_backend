@@ -64,6 +64,7 @@ model User {
   bookings      Booking[]
   paymentProofs PaymentProof[]
   auditLogs     AuditLog[]
+  reviews       Review[]
 
   @@map("users")
 }
@@ -159,11 +160,32 @@ model Tour {
   guide       TourGuide?  @relation(fields: [guideId], references: [id], onDelete: Restrict)
   images      TourImage[]
   bookings    Booking[]
+  reviews     Review[]
 
   @@index([guideId])
   @@index([status])
   @@index([isDeleted])
   @@map("tours")
+}
+
+/// A review can only be created for a tour the reviewing user has actually completed -- see
+/// review.service.ts's eligibility check (a COMPLETED Booking for this userId+tourId must exist).
+/// One review per user per tour, enforced by the unique constraint below; editing/deleting is
+/// restricted to the review's own author or staff (SUPER_ADMIN/ADMIN) -- see rbac.ts's requireRole.
+model Review {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  tourId    Int      @map("tour_id")
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tour      Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tourId])
+  @@index([tourId])
+  @@map("reviews")
 }
 
 /// Metadata only — the actual file lives in object storage, never the database.

@@ -3,15 +3,18 @@ import { authRoutes } from './auth.routes'
 import { bookingsRoutes } from './bookings.routes'
 import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
+import { currencyRoutes } from './currency.routes'
 import { customersRoutes } from './customers.routes'
 import { healthRoutes } from './health.routes'
 import { paymentMethodsRoutes } from './paymentMethods.routes'
 import { paymentsRoutes } from './payments.routes'
+import { reviewsRoutes } from './reviews.routes'
 import { type RouteDefinition, withTag } from './route-definition'
 import { settingsRoutes } from './settings.routes'
 import { toursRoutes } from './tours.routes'
 import { uploadsRoutes } from './uploads.routes'
 import { usersRoutes } from './users.routes'
+import { weatherRoutes } from './weather.routes'
 
 // The single source of truth for every route — both the Express router below
 // and the OpenAPI doc (src/docs/openapi.ts) are generated from this array,
@@ -30,6 +33,9 @@ export const allRoutes: RouteDefinition[] = [
   ...withTag('Payments', paymentsRoutes),
   ...withTag('Payment Methods', paymentMethodsRoutes),
   ...withTag('Customers', customersRoutes),
+  ...withTag('Reviews', reviewsRoutes),
+  ...withTag('Weather', weatherRoutes),
+  ...withTag('Currency', currencyRoutes),
 ]
 
 const router = Router()

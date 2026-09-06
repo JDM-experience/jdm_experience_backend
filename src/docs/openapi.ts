@@ -64,5 +64,8 @@ export const openApiDocument = generator.generateDocument({
     { name: 'Payments', description: 'Payment records for bookings.' },
     { name: 'Payment Methods', description: 'Configured payment methods for checkout.' },
     { name: 'Customers', description: 'Customer accounts (staff view).' },
+    { name: 'Reviews', description: 'Tour reviews from customers who completed a booking.' },
+    { name: 'Weather', description: 'Forecast for the fixed JDM Experience location, proxied from Open-Meteo.' },
+    { name: 'Currency', description: 'Currency conversion for display only, proxied from an exchange-rate provider.' },
   ],
 })
