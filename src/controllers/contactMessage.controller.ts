@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as contactMessageService from '../services/contactMessage.service'
 import { contactMessageIdParamSchema } from '../validators/contactMessage.validator'
+import type { ContactMessageStatus } from '../generated/prisma/client'
 
 function parseMessageId(req: Request): number {
   const parsed = contactMessageIdParamSchema.safeParse(req.params)
@@ -20,7 +21,8 @@ export async function submit(req: Request, res: Response, next: NextFunction) {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json({ success: true, data: await contactMessageService.listMessages() })
+    const { search, status } = req.query as { search?: string; status?: ContactMessageStatus }
+    res.json({ success: true, data: await contactMessageService.listMessages({ search, status }) })
   } catch (error) {
     next(error)
   }

@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
 import { recordAuditLog } from './auditLog.service'
-import type { ContactMessageStatus, Role } from '../generated/prisma/client'
+import type { ContactMessageStatus, Prisma, Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
 
@@ -34,8 +34,19 @@ export async function submitMessage(input: { name: string; email: string; subjec
   return toPublicMessage(created)
 }
 
-export async function listMessages() {
-  const rows = await prisma.contactMessage.findMany({ orderBy: { createdAt: 'desc' } })
+export async function listMessages(filter?: { search?: string; status?: ContactMessageStatus }) {
+  const where: Prisma.ContactMessageWhereInput = {}
+  if (filter?.status) where.status = filter.status
+  if (filter?.search) {
+    where.OR = [
+      { name: { contains: filter.search, mode: 'insensitive' } },
+      { email: { contains: filter.search, mode: 'insensitive' } },
+      { subject: { contains: filter.search, mode: 'insensitive' } },
+      { message: { contains: filter.search, mode: 'insensitive' } },
+    ]
+  }
+
+  const rows = await prisma.contactMessage.findMany({ where, orderBy: { createdAt: 'desc' } })
   return rows.map(toPublicMessage)
 }
 

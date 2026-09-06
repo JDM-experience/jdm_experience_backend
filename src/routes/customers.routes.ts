@@ -1,9 +1,14 @@
 import { getOne, list, update } from '../controllers/customer.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac'
-import { validateBody } from '../middleware/validate'
+import { validateBody, validateQuery } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
-import { customerResponseSchema, customersListResponseSchema, updateCustomerProfileSchema } from '../validators/customer.validator'
+import {
+  customerListQuerySchema,
+  customerResponseSchema,
+  customersListResponseSchema,
+  updateCustomerProfileSchema,
+} from '../validators/customer.validator'
 import type { RouteDefinition } from './route-definition'
 
 // No sandbox precedent -- built fresh, matching the real User+Customer models (not the
@@ -15,12 +20,15 @@ export const customersRoutes: RouteDefinition[] = [
   {
     method: 'get',
     path: '/customers',
-    handler: staffOnly.concat(list),
+    handler: staffOnly.concat([validateQuery(customerListQuerySchema), list]),
     summary: 'List customers (role=CUSTOMER users, with their travel profile)',
+    description: 'search matches name/email (case-insensitive); isActive filters to "true"/"false".',
+    request: { query: customerListQuerySchema },
     responses: {
       200: { description: 'Customers.', schema: customersListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
   {

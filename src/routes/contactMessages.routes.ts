@@ -2,9 +2,10 @@ import rateLimit from 'express-rate-limit'
 import { getOne, list, remove, submit, update } from '../controllers/contactMessage.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac'
-import { validateBody } from '../middleware/validate'
+import { validateBody, validateQuery } from '../middleware/validate'
 import { apiErrorResponseSchema } from '../validators/common.validator'
 import {
+  contactMessageListQuerySchema,
   contactMessageResponseSchema,
   contactMessagesListResponseSchema,
   createContactMessageSchema,
@@ -33,12 +34,15 @@ export const contactMessagesRoutes: RouteDefinition[] = [
   {
     method: 'get',
     path: '/contact',
-    handler: staffOnly.concat(list),
+    handler: staffOnly.concat([validateQuery(contactMessageListQuerySchema), list]),
     summary: 'List contact messages',
+    description: 'search matches name/email/subject/message (case-insensitive); status filters to one of NEW/READ/REPLIED/ARCHIVED.',
+    request: { query: contactMessageListQuerySchema },
     responses: {
-      200: { description: 'All contact messages, newest first.', schema: contactMessagesListResponseSchema },
+      200: { description: 'Contact messages, newest first.', schema: contactMessagesListResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
   {

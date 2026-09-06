@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
 import { toPublicUser } from '../types/dto'
 import { recordAuditLog } from './auditLog.service'
-import type { Customer, Role, User } from '../generated/prisma/client'
+import type { Customer, Prisma, Role, User } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
 
@@ -22,12 +22,17 @@ function toCustomerProfile(user: User, customer: Customer | null) {
   }
 }
 
-export async function listCustomers() {
-  const users = await prisma.user.findMany({
-    where: { role: 'CUSTOMER' },
-    include: { customer: true },
-    orderBy: { userId: 'asc' },
-  })
+export async function listCustomers(filter?: { search?: string; isActive?: boolean }) {
+  const where: Prisma.UserWhereInput = { role: 'CUSTOMER' }
+  if (filter?.isActive !== undefined) where.isActive = filter.isActive
+  if (filter?.search) {
+    where.OR = [
+      { fullName: { contains: filter.search, mode: 'insensitive' } },
+      { email: { contains: filter.search, mode: 'insensitive' } },
+    ]
+  }
+
+  const users = await prisma.user.findMany({ where, include: { customer: true }, orderBy: { userId: 'asc' } })
   return users.map((u) => toCustomerProfile(u, u.customer))
 }
 

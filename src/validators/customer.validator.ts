@@ -13,6 +13,19 @@ export const updateCustomerProfileSchema = z
 
 export const customerUserIdParamSchema = z.object({ userId: z.coerce.number().int().positive() })
 
+// A plain boolean query param arrives as the literal string "true"/"false" -- z.coerce.boolean()
+// would incorrectly treat "false" as truthy (non-empty string), so this maps the two accepted
+// strings explicitly instead.
+const boolQueryParam = z
+  .enum(['true', 'false'])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === 'true'))
+
+export const customerListQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  isActive: boolQueryParam,
+})
+
 const customerSchema = z
   .object({
     id: z.number().meta({ example: 3 }),

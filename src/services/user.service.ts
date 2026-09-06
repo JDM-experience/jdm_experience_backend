@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
 import { toPublicUser, type PublicUser } from '../types/dto'
 import { recordAuditLog } from './auditLog.service'
-import type { Role } from '../generated/prisma/client'
+import type { Prisma, Role } from '../generated/prisma/client'
 
 /**
  * Finds the local `users` row for an already-verified Auth0 identity, linking or creating it as
@@ -44,8 +44,16 @@ async function ensureTourGuideProfile(userId: number): Promise<void> {
   })
 }
 
-export async function listUsers(filter?: { role?: Role }): Promise<PublicUser[]> {
-  const users = await prisma.user.findMany({ where: filter?.role ? { role: filter.role } : undefined, orderBy: { userId: 'asc' } })
+export async function listUsers(filter?: { role?: Role; search?: string }): Promise<PublicUser[]> {
+  const where: Prisma.UserWhereInput = {}
+  if (filter?.role) where.role = filter.role
+  if (filter?.search) {
+    where.OR = [
+      { fullName: { contains: filter.search, mode: 'insensitive' } },
+      { email: { contains: filter.search, mode: 'insensitive' } },
+    ]
+  }
+  const users = await prisma.user.findMany({ where, orderBy: { userId: 'asc' } })
   return users.map(toPublicUser)
 }
 

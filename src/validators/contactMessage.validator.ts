@@ -15,6 +15,11 @@ export const updateContactMessageSchema = z
 
 export const contactMessageIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 
+export const contactMessageListQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  status: statusEnum.optional(),
+})
+
 const contactMessageSchema = z
   .object({
     id: z.number().meta({ example: 1 }),

@@ -12,8 +12,8 @@ function parseUserId(req: Request): number {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const role = req.query.role as Role | undefined
-    res.json({ success: true, data: await userService.listUsers(role ? { role } : undefined) })
+    const { role, search } = req.query as { role?: Role; search?: string }
+    res.json({ success: true, data: await userService.listUsers({ role, search }) })
   } catch (error) {
     next(error)
   }

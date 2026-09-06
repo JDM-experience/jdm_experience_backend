@@ -11,7 +11,8 @@ function parseUserId(req: Request): number {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json({ success: true, data: await customerService.listCustomers() })
+    const { search, isActive } = req.query as { search?: string; isActive?: boolean }
+    res.json({ success: true, data: await customerService.listCustomers({ search, isActive }) })
   } catch (error) {
     next(error)
   }
