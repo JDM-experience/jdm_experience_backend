@@ -48,3 +48,13 @@ export async function createPaymentProofUploadUrl(input: {
   const objectPath = `payment-proofs/${randomUUID()}.${extensionFor(input.contentType)}`
   return createSignedUploadUrl(objectPath)
 }
+
+/** Same mechanism again, for a staff member's proof-of-refund screenshot/receipt. SUPER_ADMIN/
+ *  ADMIN only (see uploads.routes.ts) -- this is staff evidence, not a customer upload. */
+export async function createRefundProofUploadUrl(input: {
+  fileName: string
+  contentType: ImageContentType
+}): Promise<SignedUpload> {
+  const objectPath = `refund-proofs/${randomUUID()}.${extensionFor(input.contentType)}`
+  return createSignedUploadUrl(objectPath)
+}

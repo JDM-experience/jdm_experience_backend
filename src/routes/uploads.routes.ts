@@ -1,4 +1,9 @@
-import { createPaymentMethodImageUpload, createPaymentProofUpload, createTourImageUpload } from '../controllers/upload.controller'
+import {
+  createPaymentMethodImageUpload,
+  createPaymentProofUpload,
+  createRefundProofUpload,
+  createTourImageUpload,
+} from '../controllers/upload.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac'
 import { validateBody } from '../middleware/validate'
@@ -58,6 +63,21 @@ export const uploadsRoutes: RouteDefinition[] = [
     responses: {
       201: { description: 'Signed upload URL issued.', schema: signedUploadResponseSchema },
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+      500: { description: 'Storage is not configured or the sign request failed.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'post',
+    path: '/uploads/refund-proofs',
+    handler: [requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), validateBody(createTourImageUploadSchema), createRefundProofUpload],
+    summary: 'Get a signed URL for uploading a refund proof (SUPER_ADMIN/ADMIN only)',
+    description: 'Same signed-URL mechanism as /uploads/tour-images, different storage folder -- staff evidence of a processed refund.',
+    request: { body: createTourImageUploadSchema },
+    responses: {
+      201: { description: 'Signed upload URL issued.', schema: signedUploadResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not SUPER_ADMIN or ADMIN.', schema: apiErrorResponseSchema },
       422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
       500: { description: 'Storage is not configured or the sign request failed.', schema: apiErrorResponseSchema },
     },

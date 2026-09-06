@@ -115,3 +115,128 @@ export async function sendBookingConfirmedEmail(input: BookingConfirmedNotificat
 
   await sendEmail({ to: input.to, subject, text })
 }
+
+interface CancellationRequestStaffNotification {
+  recipients: string[]
+  cancellationRequestId: number
+  bookingId: number
+  customerName: string
+  customerEmail: string
+  tourName: string
+  bookingDate: string
+  originalAmount: number
+  refundAmount: number
+  refundMethodName: string
+  refundDestination: string
+  reason: string
+  requestedAt: string
+}
+
+/** Sent to SUPER_ADMIN/ADMIN (+ the tour's own guide) the moment a customer submits a paid-
+ *  booking cancellation request -- same recipient-lookup pattern as sendPaymentProofSubmittedEmail. */
+export async function sendCancellationRequestStaffNotification(input: CancellationRequestStaffNotification): Promise<void> {
+  const subject = `New Booking Cancellation Request - JDM-${input.bookingId}`
+  const text = [
+    `A customer has requested cancellation of a paid booking. Action is required.`,
+    ``,
+    `Cancellation Request ID: CR-${input.cancellationRequestId}`,
+    `Booking Reference: JDM-${input.bookingId}`,
+    `Customer: ${input.customerName} (${input.customerEmail})`,
+    `Tour: ${input.tourName}`,
+    `Booking Date: ${input.bookingDate}`,
+    `Original Amount: ${input.originalAmount}`,
+    `Requested Refund Amount: ${input.refundAmount}`,
+    `Refund Method: ${input.refundMethodName}`,
+    `Refund Destination: ${input.refundDestination}`,
+    `Reason: ${input.reason}`,
+    `Requested: ${input.requestedAt}`,
+  ].join('\n')
+
+  await Promise.all(input.recipients.map((to) => sendEmail({ to, subject, text })))
+}
+
+interface CancellationRequestSubmittedNotification {
+  to: string
+  customerName: string
+  bookingId: number
+  tourName: string
+}
+
+/** Customer-facing acknowledgement -- sent immediately on submission, before any staff review. */
+export async function sendCancellationRequestSubmittedEmail(input: CancellationRequestSubmittedNotification): Promise<void> {
+  const subject = `Cancellation Request Received - JDM-${input.bookingId}`
+  const text = [
+    `Hello ${input.customerName},`,
+    ``,
+    `We've received your cancellation request for the following booking.`,
+    ``,
+    `Booking Reference: JDM-${input.bookingId}`,
+    `Tour: ${input.tourName}`,
+    ``,
+    `Your request is now awaiting review by our administrator. Submitting this request does not ` +
+      `immediately issue a refund -- we'll email you again once it's been reviewed.`,
+    ``,
+    `Thank you.`,
+  ].join('\n')
+
+  await sendEmail({ to: input.to, subject, text })
+}
+
+interface CancellationRequestRejectedNotification {
+  to: string
+  customerName: string
+  bookingId: number
+  tourName: string
+  rejectionReason: string
+}
+
+export async function sendCancellationRequestRejectedEmail(input: CancellationRequestRejectedNotification): Promise<void> {
+  const subject = `Your Cancellation Request Was Not Approved - JDM-${input.bookingId}`
+  const text = [
+    `Hello ${input.customerName},`,
+    ``,
+    `Your cancellation request for the following booking has been rejected.`,
+    ``,
+    `Booking Reference: JDM-${input.bookingId}`,
+    `Tour: ${input.tourName}`,
+    `Reason: ${input.rejectionReason}`,
+    ``,
+    `Your booking remains active. If you have questions, please contact us.`,
+    ``,
+    `Thank you.`,
+  ].join('\n')
+
+  await sendEmail({ to: input.to, subject, text })
+}
+
+interface CancellationRefundCompletedNotification {
+  to: string
+  customerName: string
+  bookingId: number
+  tourName: string
+  bookingDate: string
+  refundAmount: number
+  refundMethodName: string
+}
+
+export async function sendCancellationRefundCompletedEmail(input: CancellationRefundCompletedNotification): Promise<void> {
+  const subject = 'Your Japan JDM Experience Refund Has Been Processed'
+  const text = [
+    `Hello ${input.customerName},`,
+    ``,
+    `Your booking has been cancelled and your refund has been processed.`,
+    ``,
+    `Booking Reference: JDM-${input.bookingId}`,
+    `Tour: ${input.tourName}`,
+    `Booking Date: ${input.bookingDate}`,
+    `Refund Amount: ${input.refundAmount}`,
+    `Refund Method: ${input.refundMethodName}`,
+    `Status: REFUNDED`,
+    ``,
+    `If you have any questions about this refund, please contact us.`,
+    ``,
+    `Thank you.`,
+  ].join('\n')
+
+  await sendEmail({ to: input.to, subject, text })
+}

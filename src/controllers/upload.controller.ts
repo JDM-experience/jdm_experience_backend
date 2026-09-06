@@ -27,3 +27,12 @@ export async function createPaymentProofUpload(req: Request, res: Response, next
     next(error)
   }
 }
+
+export async function createRefundProofUpload(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await uploadService.createRefundProofUploadUrl(req.body)
+    res.status(201).json({ success: true, data })
+  } catch (error) {
+    next(error)
+  }
+}

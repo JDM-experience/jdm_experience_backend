@@ -85,3 +85,30 @@ export const verifyBookingOwnership: RequestHandler = async (req, res, next) => 
     next(error)
   }
 }
+
+/**
+ * For GET /cancellation-requests/:id: 403 unless the caller is SUPER_ADMIN/ADMIN or the request's
+ * own customer -- no TOUR_GUIDE branch (unlike verifyBookingOwnership), since refund destination
+ * details are staff-only sensitive information and this workflow never involves guides. Reads the
+ * cancellation request id from `:id`.
+ */
+export const verifyCancellationRequestOwnership: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) throw new ApiError(401, 'Not authenticated.')
+    if (STAFF_ROLES.includes(req.user.role)) {
+      next()
+      return
+    }
+
+    const id = Number(req.params.id)
+    const cancellationRequest = await prisma.cancellationRequest.findUnique({ where: { id } })
+    if (!cancellationRequest) throw new ApiError(404, 'Cancellation request not found.')
+
+    if (cancellationRequest.customerId !== req.user.userId) {
+      throw new ApiError(403, 'You are not authorized to view this cancellation request.')
+    }
+    next()
+  } catch (error) {
+    next(error)
+  }
+}

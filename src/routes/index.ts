@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authRoutes } from './auth.routes'
 import { bookingsRoutes } from './bookings.routes'
+import { cancellationRequestsRoutes } from './cancellationRequests.routes'
 import { clientRoutes } from './client.routes'
 import { contactMessagesRoutes } from './contactMessages.routes'
 import { currencyRoutes } from './currency.routes'
@@ -31,6 +32,7 @@ export const allRoutes: RouteDefinition[] = [
   ...withTag('Tours', toursRoutes),
   ...withTag('Uploads', uploadsRoutes),
   ...withTag('Bookings', bookingsRoutes),
+  ...withTag('Cancellation Requests', cancellationRequestsRoutes),
   ...withTag('Payments', paymentsRoutes),
   ...withTag('Payment Methods', paymentMethodsRoutes),
   ...withTag('Customers', customersRoutes),

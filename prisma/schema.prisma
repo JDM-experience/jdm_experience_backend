@@ -65,6 +65,7 @@ model User {
   paymentProofs PaymentProof[]
   auditLogs     AuditLog[]
   reviews       Review[]
+  cancellationRequests CancellationRequest[]
 
   @@map("users")
 }
@@ -94,6 +95,14 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum CancellationRequestStatus {
+  PENDING
+  APPROVED
+  REFUND_PROCESSING
+  REFUNDED
+  REJECTED
 }
 
 enum ContactMessageStatus {
@@ -247,6 +256,7 @@ model Booking {
   paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   payments          Payment[]
   paymentProofs     PaymentProof[]
+  cancellationRequest CancellationRequest?
 
   @@index([userId])
   @@index([tourId])
@@ -269,6 +279,7 @@ model PaymentMethod {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   bookings    Booking[]
+  cancellationRequests CancellationRequest[]
 
   @@index([isActive])
   @@map("payment_methods")
@@ -306,6 +317,43 @@ model PaymentProof {
 
   @@index([bookingId])
   @@map("payment_proofs")
+}
+
+/// A paid/confirmed booking's cancellation + refund workflow -- distinct from the direct
+/// self-cancel path for PENDING+UNPAID bookings (see cancelOwnBooking in booking.service.ts),
+/// which needs no request/approval step. One request per booking, ever (bookingId is unique) --
+/// once submitted, approved/rejected/refunded, no second request can be created for that booking.
+/// refundMethodId reuses the existing dynamic PaymentMethod list (same pattern as
+/// Booking.paymentMethodId); refundMethodNameSnapshot preserves the name even if that method is
+/// later deactivated/deleted, same as Booking.tourNameSnapshot. Approval/refund-processing never
+/// touch the Booking itself -- only completeRefund (status -> REFUNDED here) also transitions the
+/// Booking to CANCELLED/REFUNDED, via the existing updateBookingStatus in booking.service.ts.
+model CancellationRequest {
+  id                       Int                        @id @default(autoincrement())
+  bookingId                Int                        @unique @map("booking_id")
+  customerId               Int                        @map("customer_id")
+  reason                   String
+  refundMethodId           Int?                       @map("refund_method_id")
+  refundMethodNameSnapshot String                     @map("refund_method_name_snapshot")
+  refundDestination        String                     @map("refund_destination")
+  refundAmount             Decimal                    @map("refund_amount") @db.Decimal(10, 2)
+  status                   CancellationRequestStatus  @default(PENDING)
+  rejectionReason          String?                    @map("rejection_reason")
+  refundProofUrl           String?                    @map("refund_proof_url")
+  refundProofFileName      String?                    @map("refund_proof_file_name")
+  refundProofFileType      String?                    @map("refund_proof_file_type")
+  approvedAt               DateTime?                  @map("approved_at")
+  rejectedAt               DateTime?                  @map("rejected_at")
+  refundedAt               DateTime?                  @map("refunded_at")
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+  booking                  Booking                    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer                 User                       @relation(fields: [customerId], references: [userId])
+  refundMethod             PaymentMethod?             @relation(fields: [refundMethodId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([customerId])
+  @@map("cancellation_requests")
 }
 
 model ContactMessage {

@@ -55,3 +55,26 @@ export function isBookingClosedForDate(date: string, cutoffHour: number): boolea
 export function isBookingAllowed(date: string, cutoffHour: number): boolean {
   return isValidDateString(date) && !isBookingClosedForDate(date, cutoffHour)
 }
+
+// No per-booking time-of-day is stored (customers only ever pick a date -- see
+// DEFAULT_BOOKING_TIME in the frontend's constants), so "the scheduled booking time" for the
+// paid-cancellation 24-hour cutoff is always this fixed JST slot.
+const DEFAULT_BOOKING_TIME_JST = '09:00'
+
+/** The instant (as a UTC Date) that a booking's day actually starts, JST. `bookingDate` may be a
+ *  bare `YYYY-MM-DD` string or the Prisma `Date` column value (a bare-date Date, sliced to its
+ *  ISO date portion). JST has no DST, so a fixed "+09:00" offset is always correct. */
+export function getBookingStartInstant(bookingDate: Date | string): Date {
+  const dateOnly = typeof bookingDate === 'string' ? bookingDate.slice(0, 10) : bookingDate.toISOString().slice(0, 10)
+  return new Date(`${dateOnly}T${DEFAULT_BOOKING_TIME_JST}:00+09:00`)
+}
+
+/**
+ * Paid-booking cancellation eligibility: the request must arrive MORE than 24 hours before the
+ * booking starts -- exactly 24 hours is treated as NOT allowed (strict `>`), per the agreed
+ * business rule. This is the enforcement copy; never trust a frontend-computed equivalent.
+ */
+export function isMoreThan24HoursBeforeBooking(bookingDate: Date | string): boolean {
+  const start = getBookingStartInstant(bookingDate)
+  return start.getTime() - Date.now() > 24 * 60 * 60 * 1000
+}
