@@ -6,6 +6,7 @@ import { recordAuditLog } from './auditLog.service'
 import { sendBookingConfirmedEmail } from './email.service'
 import { createNotification } from './notification.service'
 import { notifyPaymentProofSubmitted } from './payment.service'
+import { getEffectiveTourPrice } from './tour.service'
 import { Prisma, type BookingStatus, type PaymentStatus, type Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
@@ -114,6 +115,14 @@ export async function createBooking(
     }
     await tx.tourDateHold.delete({ where: { id: hold.id } })
 
+    // The price actually charged -- recomputed here from the tour's own price + its Limited-Time
+    // Offer (re-checked against the current instant, inside this same transaction), never trusted
+    // from anything the checkout page sent. If the offer expires between page-load and this
+    // request, the customer is simply charged the now-current (regular) price -- there is no
+    // client-supplied discount to "reject", since none was ever accepted as input in the first
+    // place (see the Limited-Time Offer spec's booking-price-validation rule).
+    const unitPrice = getEffectiveTourPrice(tour)
+
     const createdBooking = await tx.booking.create({
       data: {
         userId: actor.userId,
@@ -123,13 +132,13 @@ export async function createBooking(
         bookingDate,
         participants: input.participants,
         status: 'PENDING',
-        totalPrice: Number(tour.price) * input.participants,
+        totalPrice: unitPrice * input.participants,
         // Proof arrives in the same request that creates the booking, so it's already
         // "submitted, awaiting review" from the very first moment it exists -- never a
         // momentarily-UNPAID row with no proof attached.
         paymentStatus: 'PENDING',
         tourNameSnapshot: tour.name,
-        unitPriceSnapshot: tour.price,
+        unitPriceSnapshot: unitPrice,
         currency: tour.currency ?? 'JPY',
         specialRequests: input.specialRequests,
         customerName: input.customerName,

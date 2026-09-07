@@ -168,6 +168,15 @@ model Tour {
   contactName  String?     @map("contact_name")
   contactEmail String?     @map("contact_email")
   contactPhone String?     @map("contact_phone")
+  /// Limited-Time Offer — a temporary discount off `price`, never a separate stored price (the
+  /// discounted price is always computed on the fly from price + discount, see
+  /// tour.service.ts's getEffectiveTourPrice). An offer is only ever "active" while enabled AND
+  /// the current instant falls within [limitedOfferStart, limitedOfferEnd) — see
+  /// isLimitedOfferActive, the single source of truth re-checked on every read and at booking time.
+  limitedOfferEnabled  Boolean   @default(false) @map("limited_offer_enabled")
+  limitedOfferDiscount Decimal?  @db.Decimal(5, 2) @map("limited_offer_discount")
+  limitedOfferStart    DateTime? @map("limited_offer_start")
+  limitedOfferEnd      DateTime? @map("limited_offer_end")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
   guide       TourGuide?  @relation(fields: [guideId], references: [id], onDelete: Restrict)

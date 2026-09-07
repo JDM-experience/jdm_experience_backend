@@ -15,6 +15,50 @@ export const TOUR_INCLUDE = {
 
 type TourWithRelations = Prisma.TourGetPayload<{ include: typeof TOUR_INCLUDE }>
 
+// Minimal shape both TourWithRelations and a bare `prisma.tour.findUnique()` row satisfy --
+// booking.service.ts calls these against a plain Tour row (no includes needed for pricing).
+export interface TourPricingFields {
+  price: Prisma.Decimal
+  limitedOfferEnabled: boolean
+  limitedOfferDiscount: Prisma.Decimal | null
+  limitedOfferStart: Date | null
+  limitedOfferEnd: Date | null
+}
+
+/** The single source of truth for "is this tour's discount currently live" -- re-derived from
+ *  enabled/start/end on every call (start inclusive, end exclusive), never read from a cached or
+ *  client-supplied flag. Used both for the public API's `limitedOffer.isActive` and to gate the
+ *  price actually charged at booking time. */
+export function isLimitedOfferActive(tour: TourPricingFields): boolean {
+  if (!tour.limitedOfferEnabled) return false
+  if (tour.limitedOfferDiscount === null || !tour.limitedOfferStart || !tour.limitedOfferEnd) return false
+  const now = Date.now()
+  return now >= tour.limitedOfferStart.getTime() && now < tour.limitedOfferEnd.getTime()
+}
+
+/** The price actually charged -- the tour's regular price whenever no offer is active, otherwise
+ *  price discounted by the live offer's percentage. Never stored; always recomputed from `price` +
+ *  the discount, so `price` stays the single source of truth (see the Limited-Time Offer spec's
+ *  "do not duplicate data" rule). This is what booking.service.ts uses for totalPrice/
+ *  unitPriceSnapshot -- the frontend's own copy of the discount is never trusted for that. */
+export function getEffectiveTourPrice(tour: TourPricingFields): number {
+  const price = Number(tour.price)
+  if (!isLimitedOfferActive(tour)) return price
+  const discount = Number(tour.limitedOfferDiscount)
+  // price * (100 - discount) / 100, rounded to 2 decimal places (cents).
+  return Math.round(price * (100 - discount)) / 100
+}
+
+function toPublicLimitedOffer(tour: TourPricingFields) {
+  return {
+    enabled: tour.limitedOfferEnabled,
+    discount: tour.limitedOfferDiscount !== null ? Number(tour.limitedOfferDiscount) : null,
+    startAt: tour.limitedOfferStart,
+    endAt: tour.limitedOfferEnd,
+    isActive: isLimitedOfferActive(tour),
+  }
+}
+
 export function toPublicTour(tour: TourWithRelations) {
   return {
     id: tour.id,
@@ -36,6 +80,7 @@ export function toPublicTour(tour: TourWithRelations) {
         }
       : null,
     images: tour.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl, sortOrder: img.sortOrder, focalX: img.focalX, focalY: img.focalY })),
+    limitedOffer: toPublicLimitedOffer(tour),
     createdAt: tour.createdAt,
     updatedAt: tour.updatedAt,
   }
@@ -126,6 +171,46 @@ export async function listTourGuides() {
   }))
 }
 
+interface LimitedOfferInput {
+  limitedOfferEnabled?: boolean
+  limitedOfferDiscount?: number
+  limitedOfferStart?: Date
+  limitedOfferEnd?: Date
+}
+
+/** Configuring a Limited-Time Offer is staff-only (SUPER_ADMIN/ADMIN) -- a Tour Guide may still
+ *  edit their own tour's other details, but never its pricing promotion. Mirrors the existing
+ *  status-field restriction just above/below this. */
+function assertStaffOnlyLimitedOfferInput(actor: Actor, input: LimitedOfferInput) {
+  const touchesOffer =
+    input.limitedOfferEnabled !== undefined ||
+    input.limitedOfferDiscount !== undefined ||
+    input.limitedOfferStart !== undefined ||
+    input.limitedOfferEnd !== undefined
+  if (actor.role === 'TOUR_GUIDE' && touchesOffer) {
+    throw new ApiError(403, 'Tour guides cannot configure Limited-Time Offers.')
+  }
+}
+
+/** Re-validates the *effective* (merged) offer state, not just whatever subset of fields this
+ *  request happened to send -- a partial update that only changes the discount must still be
+ *  rejected if the resulting start/end (carried over from the existing row) would be invalid. */
+function assertValidLimitedOffer(offer: { enabled: boolean; discount: number | null; start: Date | null; end: Date | null }) {
+  if (!offer.enabled) return
+  if (offer.discount === null) {
+    throw new ApiError(400, 'A discount percentage is required to enable a Limited-Time Offer.')
+  }
+  if (offer.discount <= 0 || offer.discount > 100) {
+    throw new ApiError(400, 'Discount must be greater than 0% and no more than 100%.')
+  }
+  if (!offer.start || !offer.end) {
+    throw new ApiError(400, 'A start and end date/time are required to enable a Limited-Time Offer.')
+  }
+  if (offer.start.getTime() >= offer.end.getTime()) {
+    throw new ApiError(400, 'The Limited-Time Offer start must be before its end.')
+  }
+}
+
 export async function createTour(
   actor: Actor,
   input: {
@@ -137,8 +222,10 @@ export async function createTour(
     seats: number
     guideId?: number | null
     images?: { imageUrl: string; sortOrder: number; focalX?: number; focalY?: number }[]
-  },
+  } & LimitedOfferInput,
 ) {
+  assertStaffOnlyLimitedOfferInput(actor, input)
+
   // A Tour Guide is always auto-assigned as the owner of a tour they create — never trust a
   // client-supplied guideId for their own request, and never let them create on someone else's
   // behalf. Staff (Super Admin/Admin) keep full control over guideId, including leaving it unset.
@@ -149,6 +236,12 @@ export async function createTour(
       throw new ApiError(400, 'Your tour guide profile is not set up yet. Contact an admin.')
     }
   }
+
+  const limitedOfferEnabled = input.limitedOfferEnabled ?? false
+  const limitedOfferDiscount = input.limitedOfferDiscount ?? null
+  const limitedOfferStart = input.limitedOfferStart ?? null
+  const limitedOfferEnd = input.limitedOfferEnd ?? null
+  assertValidLimitedOffer({ enabled: limitedOfferEnabled, discount: limitedOfferDiscount, start: limitedOfferStart, end: limitedOfferEnd })
 
   const tour = await prisma.tour.create({
     data: {
@@ -162,6 +255,10 @@ export async function createTour(
       status: 'PENDING',
       seats: input.seats,
       guideId,
+      limitedOfferEnabled,
+      limitedOfferDiscount,
+      limitedOfferStart,
+      limitedOfferEnd,
       images: input.images?.length
         ? {
             create: input.images.map((img) => ({
@@ -192,8 +289,10 @@ export async function updateTour(
     status?: TourStatus
     seats?: number
     guideId?: number | null
-  },
+  } & LimitedOfferInput,
 ) {
+  assertStaffOnlyLimitedOfferInput(actor, input)
+
   // A guide may edit their own tour's details, but may not hand it off to someone else, and may
   // not change its availability status — that's a staff-only action (see confirmTour below and
   // the "Manual Availability Management" rules).
@@ -213,6 +312,15 @@ export async function updateTour(
   const existing = await prisma.tour.findUnique({ where: { id: tourId } })
   if (!existing || existing.isDeleted) throw new ApiError(404, 'Tour not found.')
 
+  // Merge against the existing row -- a request that only changes e.g. the discount must still be
+  // validated against whatever start/end is already saved, not just the fields it happened to send.
+  const limitedOfferEnabled = input.limitedOfferEnabled ?? existing.limitedOfferEnabled
+  const limitedOfferDiscount =
+    input.limitedOfferDiscount ?? (existing.limitedOfferDiscount !== null ? Number(existing.limitedOfferDiscount) : null)
+  const limitedOfferStart = input.limitedOfferStart ?? existing.limitedOfferStart
+  const limitedOfferEnd = input.limitedOfferEnd ?? existing.limitedOfferEnd
+  assertValidLimitedOffer({ enabled: limitedOfferEnabled, discount: limitedOfferDiscount, start: limitedOfferStart, end: limitedOfferEnd })
+
   const tour = await prisma.tour.update({
     where: { id: tourId },
     data: {
@@ -224,6 +332,10 @@ export async function updateTour(
       status: input.status,
       seats: input.seats,
       guideId: input.guideId,
+      limitedOfferEnabled,
+      limitedOfferDiscount,
+      limitedOfferStart,
+      limitedOfferEnd,
     },
     include: TOUR_INCLUDE,
   })

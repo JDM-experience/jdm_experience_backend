@@ -28,6 +28,10 @@ export const updateTourImageSchema = z
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
+// 0 excluded (must be > 0), 100 is the inclusive ceiling -- see the Limited-Time Offer spec's
+// server-side validation rules.
+const limitedOfferDiscountSchema = z.number().gt(0, 'Discount must be greater than 0%.').max(100, 'Discount must not exceed 100%.')
+
 export const createTourSchema = z.object({
   name: z.string().trim().min(1, 'Tour name is required.').max(150),
   slug: z.string().trim().min(1, 'Slug is required.').max(150).regex(slugPattern, 'Slug must be lowercase, alphanumeric, hyphen-separated.'),
@@ -41,6 +45,14 @@ export const createTourSchema = z.object({
   guideId: z.number().int().positive().nullable().optional(),
   // Optional — attach images (already uploaded via POST /uploads/tour-images) in the same request.
   images: z.array(addTourImageSchema).max(20).optional(),
+  // Limited-Time Offer -- individually-shaped fields only here; the cross-field rule ("if enabled,
+  // discount/start/end are all required and start < end") is enforced in tour.service.ts, which
+  // merges this against the tour's existing row for updates (a partial update may only touch one
+  // of these fields at a time, which zod alone can't validate against unseen DB state).
+  limitedOfferEnabled: z.boolean().optional(),
+  limitedOfferDiscount: limitedOfferDiscountSchema.optional(),
+  limitedOfferStart: z.coerce.date().optional(),
+  limitedOfferEnd: z.coerce.date().optional(),
 })
 
 export const updateTourSchema = z
@@ -53,6 +65,10 @@ export const updateTourSchema = z
     status: statusEnum.optional(),
     seats: z.number().int().positive('Seats must be a whole number greater than 0.').optional(),
     guideId: z.number().int().positive().nullable().optional(),
+    limitedOfferEnabled: z.boolean().optional(),
+    limitedOfferDiscount: limitedOfferDiscountSchema.optional(),
+    limitedOfferStart: z.coerce.date().optional(),
+    limitedOfferEnd: z.coerce.date().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
@@ -120,6 +136,18 @@ const tourImageSchema = z
   })
   .meta({ id: 'TourImage' })
 
+const limitedOfferSchema = z
+  .object({
+    enabled: z.boolean().meta({ example: true }),
+    discount: z.number().nullable().meta({ example: 25 }),
+    startAt: z.string().nullable().meta({ example: '2026-09-10T01:00:00.000Z' }),
+    endAt: z.string().nullable().meta({ example: '2026-09-15T14:59:00.000Z' }),
+    // Server-computed, re-derived from enabled/startAt/endAt on every response -- never trust a
+    // client-cached copy of this to decide whether a discounted price may still be booked.
+    isActive: z.boolean().meta({ example: true }),
+  })
+  .meta({ id: 'LimitedOffer' })
+
 // Exported for reuse by wishlist.validator.ts, which embeds a full Tour in each wishlist item.
 export const tourSchema = z
   .object({
@@ -133,6 +161,7 @@ export const tourSchema = z
     seats: z.number().int().meta({ example: 4 }),
     guide: tourGuideSchema.nullable(),
     images: z.array(tourImageSchema),
+    limitedOffer: limitedOfferSchema,
     createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
     updatedAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
   })
