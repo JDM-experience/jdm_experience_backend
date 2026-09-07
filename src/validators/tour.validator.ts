@@ -12,10 +12,21 @@ const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const tourSortByEnum = z.enum(['name', 'price', 'seats', 'createdAt', 'status'])
 const sortOrderEnum = z.enum(['asc', 'desc'])
 
+const focalPercentSchema = z.number().min(0).max(100)
+
 export const addTourImageSchema = z.object({
   imageUrl: z.string().trim().min(1).max(500),
   sortOrder: z.number().int().nonnegative().default(0),
+  focalX: focalPercentSchema.default(50),
+  focalY: focalPercentSchema.default(50),
 })
+
+export const updateTourImageSchema = z
+  .object({
+    focalX: focalPercentSchema.optional(),
+    focalY: focalPercentSchema.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
 
 export const createTourSchema = z.object({
   name: z.string().trim().min(1, 'Tour name is required.').max(150),
@@ -104,6 +115,8 @@ const tourImageSchema = z
     id: z.number().meta({ example: 1 }),
     imageUrl: z.string().meta({ example: 'https://example.com/tour.jpg' }),
     sortOrder: z.number().int().meta({ example: 0 }),
+    focalX: z.number().meta({ example: 50 }),
+    focalY: z.number().meta({ example: 50 }),
   })
   .meta({ id: 'TourImage' })
 

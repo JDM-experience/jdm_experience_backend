@@ -14,6 +14,7 @@ import {
   removeImage,
   update,
   updateContact,
+  updateImage,
 } from '../controllers/tour.controller'
 import { requireAuth } from '../middleware/auth.middleware'
 import { requireRole, verifyTourAssignment } from '../middleware/rbac'
@@ -35,6 +36,7 @@ import {
   tourListQuerySchema,
   tourResponseSchema,
   toursListResponseSchema,
+  updateTourImageSchema,
   updateTourSchema,
 } from '../validators/tour.validator'
 import type { RouteDefinition } from './route-definition'
@@ -270,6 +272,21 @@ export const toursRoutes: RouteDefinition[] = [
       401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
       403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
       404: { description: 'No image with that id on that tour.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'patch',
+    path: '/tours/:tourId/images/:imageId',
+    handler: [...staffOrOwnGuide, validateBody(updateTourImageSchema), updateImage],
+    summary: "Update a tour image's focal point (crop center)",
+    request: { body: updateTourImageSchema },
+    responses: {
+      200: { description: 'Image updated.', schema: tourImageResponseSchema },
+      400: { description: 'tourId/imageId was not a positive integer.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      403: { description: 'Not staff or the assigned guide.', schema: apiErrorResponseSchema },
+      404: { description: 'No image with that id on that tour.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
 ]

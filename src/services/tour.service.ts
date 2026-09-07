@@ -35,7 +35,7 @@ export function toPublicTour(tour: TourWithRelations) {
           bio: tour.guide.bio,
         }
       : null,
-    images: tour.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl, sortOrder: img.sortOrder })),
+    images: tour.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl, sortOrder: img.sortOrder, focalX: img.focalX, focalY: img.focalY })),
     createdAt: tour.createdAt,
     updatedAt: tour.updatedAt,
   }
@@ -136,7 +136,7 @@ export async function createTour(
     currency: string
     seats: number
     guideId?: number | null
-    images?: { imageUrl: string; sortOrder: number }[]
+    images?: { imageUrl: string; sortOrder: number; focalX?: number; focalY?: number }[]
   },
 ) {
   // A Tour Guide is always auto-assigned as the owner of a tour they create — never trust a
@@ -163,7 +163,14 @@ export async function createTour(
       seats: input.seats,
       guideId,
       images: input.images?.length
-        ? { create: input.images.map((img) => ({ imageUrl: img.imageUrl, sortOrder: img.sortOrder })) }
+        ? {
+            create: input.images.map((img) => ({
+              imageUrl: img.imageUrl,
+              sortOrder: img.sortOrder,
+              focalX: img.focalX ?? 50,
+              focalY: img.focalY ?? 50,
+            })),
+          }
         : undefined,
     },
     include: TOUR_INCLUDE,
@@ -257,15 +264,25 @@ export async function confirmTour(actor: Actor, tourId: number) {
   return toPublicTour(updated)
 }
 
-export async function addTourImage(actor: Actor, tourId: number, input: { imageUrl: string; sortOrder: number }) {
+export async function addTourImage(
+  actor: Actor,
+  tourId: number,
+  input: { imageUrl: string; sortOrder: number; focalX?: number; focalY?: number },
+) {
   const tour = await prisma.tour.findUnique({ where: { id: tourId } })
   if (!tour) throw new ApiError(404, 'Tour not found.')
 
   const image = await prisma.tourImage.create({
-    data: { tourId, imageUrl: input.imageUrl, sortOrder: input.sortOrder },
+    data: {
+      tourId,
+      imageUrl: input.imageUrl,
+      sortOrder: input.sortOrder,
+      focalX: input.focalX ?? 50,
+      focalY: input.focalY ?? 50,
+    },
   })
   await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.image_update', entity: 'tours', entityId: tourId })
-  return { id: image.id, imageUrl: image.imageUrl, sortOrder: image.sortOrder }
+  return { id: image.id, imageUrl: image.imageUrl, sortOrder: image.sortOrder, focalX: image.focalX, focalY: image.focalY }
 }
 
 export async function removeTourImage(actor: Actor, tourId: number, imageId: number): Promise<void> {
@@ -273,6 +290,29 @@ export async function removeTourImage(actor: Actor, tourId: number, imageId: num
   if (!image || image.tourId !== tourId) throw new ApiError(404, 'Tour image not found.')
   await prisma.tourImage.delete({ where: { id: imageId } })
   await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.image_update', entity: 'tours', entityId: tourId })
+}
+
+// Sets an image's focal point (0-100% of width/height), applied wherever this image is rendered
+// with `object-fit: cover` via CSS `object-position` -- lets an admin keep the subject centered
+// even though crop ratios differ per placement (grid card vs. hero vs. detail page).
+export async function updateTourImage(
+  actor: Actor,
+  tourId: number,
+  imageId: number,
+  input: { focalX?: number; focalY?: number },
+) {
+  const image = await prisma.tourImage.findUnique({ where: { id: imageId } })
+  if (!image || image.tourId !== tourId) throw new ApiError(404, 'Tour image not found.')
+
+  const updated = await prisma.tourImage.update({
+    where: { id: imageId },
+    data: {
+      focalX: input.focalX ?? image.focalX,
+      focalY: input.focalY ?? image.focalY,
+    },
+  })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.image_update', entity: 'tours', entityId: tourId })
+  return { id: updated.id, imageUrl: updated.imageUrl, sortOrder: updated.sortOrder, focalX: updated.focalX, focalY: updated.focalY }
 }
 
 // Ownership (SUPER_ADMIN/ADMIN: any tour; TOUR_GUIDE: only their own) is already enforced by the

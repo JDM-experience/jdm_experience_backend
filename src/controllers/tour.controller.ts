@@ -130,6 +130,16 @@ export async function removeImage(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function updateImage(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { tourId, imageId } = parseParams(tourImageParamSchema, req.params)
+    const image = await tourService.updateTourImage(req.user!, tourId, imageId, req.body)
+    res.json({ success: true, data: image })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function bookedDates(req: Request, res: Response, next: NextFunction) {
   try {
     const { tourId } = parseParams(tourChildParamSchema, req.params)

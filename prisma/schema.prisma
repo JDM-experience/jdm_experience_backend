@@ -229,6 +229,11 @@ model TourImage {
   tourId    Int    @map("tour_id")
   imageUrl  String @map("image_url")
   sortOrder Int    @default(0) @map("sort_order")
+  /// Focal point as a percentage (0-100) of image width/height, used as CSS `object-position`
+  /// wherever this image is rendered with `object-fit: cover`, so admins can keep the subject
+  /// (e.g. a car) visible even though the crop ratio differs per placement (grid card vs. hero).
+  focalX    Float  @default(50) @map("focal_x")
+  focalY    Float  @default(50) @map("focal_y")
   tour      Tour   @relation(fields: [tourId], references: [id], onDelete: Cascade)
 
   @@index([tourId])
