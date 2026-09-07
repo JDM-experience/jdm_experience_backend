@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer'
+import { buildWaMeLink } from '../lib/whatsapp'
 
 /**
  * Centralized outbound email. Configured entirely from env vars (see .env.example) — never
@@ -87,7 +88,11 @@ interface BookingConfirmedNotification {
   status: string
   contactName: string | null
   contactEmail: string | null
-  contactPhone: string | null
+  // Already resolved by the caller (Contact Settings WhatsApp number, falling back to the
+  // assigned Tour Guide's own profile number) -- see resolveTourWhatsapp in tour.service.ts. This
+  // is deliberately the ONLY phone-shaped field this function still uses; the old bare "Phone:"
+  // line is replaced with an explicitly-labeled WhatsApp section below.
+  tourGuideWhatsapp: string | null
 }
 
 export async function sendBookingConfirmedEmail(input: BookingConfirmedNotification): Promise<void> {
@@ -106,7 +111,14 @@ export async function sendBookingConfirmedEmail(input: BookingConfirmedNotificat
     `Tour Contact:`,
     input.contactName ? `${input.contactName}` : '(not set)',
     input.contactEmail ? `Email: ${input.contactEmail}` : '',
-    input.contactPhone ? `Phone: ${input.contactPhone}` : '',
+    ``,
+    `Tour Guide WhatsApp:`,
+    input.tourGuideWhatsapp
+      ? [
+          input.tourGuideWhatsapp,
+          `Contact your Tour Guide through WhatsApp using this number: ${buildWaMeLink(input.tourGuideWhatsapp)}`,
+        ].join('\n')
+      : 'Not available',
     ``,
     `Thank you.`,
   ]

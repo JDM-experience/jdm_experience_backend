@@ -6,12 +6,19 @@ import { recordAuditLog } from './auditLog.service'
 import { sendBookingConfirmedEmail } from './email.service'
 import { createNotification } from './notification.service'
 import { notifyPaymentProofSubmitted } from './payment.service'
-import { getEffectiveTourPrice } from './tour.service'
+import { getEffectiveTourPrice, resolveTourWhatsapp } from './tour.service'
 import { Prisma, type BookingStatus, type PaymentStatus, type Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
 
-const BOOKING_INCLUDE = { paymentMethod: true } satisfies Prisma.BookingInclude
+// tour+guide is included so every booking response can carry the resolved Tour Guide WhatsApp
+// contact (Contact Settings number, falling back to the assigned guide's own profile number) --
+// the same resolution used for the confirmation email, kept consistent across My Bookings, the
+// admin booking list, and booking detail (see resolveTourWhatsapp in tour.service.ts).
+const BOOKING_INCLUDE = {
+  paymentMethod: true,
+  tour: { include: { guide: true } },
+} satisfies Prisma.BookingInclude
 type BookingWithRelations = Prisma.BookingGetPayload<{ include: typeof BOOKING_INCLUDE }>
 
 function toPublicBooking(b: BookingWithRelations) {
@@ -34,6 +41,7 @@ function toPublicBooking(b: BookingWithRelations) {
     customerPhone: b.customerPhone,
     paymentMethodId: b.paymentMethodId,
     paymentMethodName: b.paymentMethod?.name ?? null,
+    tourGuideWhatsapp: resolveTourWhatsapp(b.tour, b.tour.guide),
     createdAt: b.createdAt,
   }
 }
@@ -393,7 +401,7 @@ export async function updateBookingStatus(
 
   if (input.status === 'CONFIRMED') {
     const [tour, customer] = await Promise.all([
-      prisma.tour.findUnique({ where: { id: updated.tourId } }),
+      prisma.tour.findUnique({ where: { id: updated.tourId }, include: { guide: true } }),
       prisma.user.findUnique({ where: { userId: updated.userId } }),
     ])
     const recipientEmail = updated.customerEmail ?? customer?.email
@@ -408,7 +416,9 @@ export async function updateBookingStatus(
         status: updated.status,
         contactName: tour?.contactName ?? null,
         contactEmail: tour?.contactEmail ?? null,
-        contactPhone: tour?.contactPhone ?? null,
+        // Resolved per the Contact Settings > Tour Guide profile priority (never the raw column
+        // directly) -- this is what actually goes into the email as the Tour Guide WhatsApp number.
+        tourGuideWhatsapp: tour ? resolveTourWhatsapp(tour, tour.guide) : null,
       })
     }
 

@@ -76,6 +76,8 @@ export const tourContactSchema = z
   .object({
     contactName: z.string().trim().min(1).max(150).optional(),
     contactEmail: z.string().trim().toLowerCase().email('Enter a valid email address.').optional(),
+    // This is the tour's Contact Settings "Tour Guide WhatsApp Number" field -- named contactPhone
+    // for compatibility with the existing column/API shape, not a separate whatsapp field.
     contactPhone: z.string().trim().min(1).max(50).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
@@ -84,6 +86,9 @@ const tourContactResponseDataSchema = z.object({
   contactName: z.string().nullable().meta({ example: 'John Smith' }),
   contactEmail: z.string().nullable().meta({ example: 'john@example.com' }),
   contactPhone: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
+  // Contact Settings number if set, else the assigned Tour Guide's own profile number, else null --
+  // see resolveTourWhatsapp in tour.service.ts. Read-only; not accepted on the update endpoint.
+  resolvedWhatsapp: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
 })
 export const tourContactResponseSchema = z
   .object({ success: z.literal(true), data: tourContactResponseDataSchema })

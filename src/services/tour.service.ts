@@ -431,10 +431,27 @@ export async function updateTourImage(
 // verifyTourAssignment middleware on these routes (tours.routes.ts) before either function below
 // ever runs -- no need to re-check it here.
 
+/**
+ * Contact Settings priority: the tour's own `contactPhone` (this IS the "Tour Guide WhatsApp
+ * Number" field surfaced in Contact Settings -- no separate whatsapp column was added, since this
+ * one already exists, is per-tour, and already flows into the confirmation email) first, then the
+ * assigned Tour Guide's own profile phone, then unavailable. Never a random guide/admin/hardcoded
+ * number. Re-run on every read (booking confirmation, customer display, admin preview) rather than
+ * stored, so it always reflects the current Contact Settings + guide assignment.
+ */
+export function resolveTourWhatsapp(tour: { contactPhone: string | null }, guide?: { phone: string | null } | null): string | null {
+  return tour.contactPhone?.trim() || guide?.phone?.trim() || null
+}
+
 export async function getTourContact(tourId: number) {
-  const tour = await prisma.tour.findUnique({ where: { id: tourId } })
+  const tour = await prisma.tour.findUnique({ where: { id: tourId }, include: { guide: true } })
   if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
-  return { contactName: tour.contactName, contactEmail: tour.contactEmail, contactPhone: tour.contactPhone }
+  return {
+    contactName: tour.contactName,
+    contactEmail: tour.contactEmail,
+    contactPhone: tour.contactPhone,
+    resolvedWhatsapp: resolveTourWhatsapp(tour, tour.guide),
+  }
 }
 
 export async function updateTourContact(
@@ -452,9 +469,15 @@ export async function updateTourContact(
       contactEmail: input.contactEmail,
       contactPhone: input.contactPhone,
     },
+    include: { guide: true },
   })
   await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.contact_update', entity: 'tours', entityId: tourId })
-  return { contactName: updated.contactName, contactEmail: updated.contactEmail, contactPhone: updated.contactPhone }
+  return {
+    contactName: updated.contactName,
+    contactEmail: updated.contactEmail,
+    contactPhone: updated.contactPhone,
+    resolvedWhatsapp: resolveTourWhatsapp(updated, updated.guide),
+  }
 }
 
 /** Which future dates are currently unavailable -- either an active (PENDING or CONFIRMED)

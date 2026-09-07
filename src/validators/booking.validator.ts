@@ -73,6 +73,10 @@ const bookingSchema = z
     customerPhone: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
     paymentMethodId: z.number().nullable().meta({ example: 1 }),
     paymentMethodName: z.string().nullable().meta({ example: 'GCash' }),
+    // Resolved Tour Guide WhatsApp contact for this booking's tour: the tour's own Contact
+    // Settings number if set, else the assigned Tour Guide's profile number, else null. Same value
+    // used in the confirmation email -- see resolveTourWhatsapp in tour.service.ts.
+    tourGuideWhatsapp: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
     createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
   })
   .meta({ id: 'Booking' })

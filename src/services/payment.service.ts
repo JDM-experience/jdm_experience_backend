@@ -97,11 +97,12 @@ export async function listPaymentsForBooking(actor: Actor, bookingId: number) {
 }
 
 /**
- * Attaches payment-proof metadata to a booking and notifies SUPER_ADMIN, ADMIN, and the tour's
- * own owner (never other, unrelated Tour Guides) -- recipients are looked up fresh from the
- * database every time, never hardcoded. Moves paymentStatus UNPAID -> PENDING ("payment
- * submitted, awaiting staff review") -- this never confirms the booking itself; only an explicit
- * staff action (PUT /bookings/:id, status=CONFIRMED) does that, in booking.service.ts.
+ * Attaches payment-proof metadata to a booking and notifies SUPER_ADMIN and the tour's own owning
+ * Tour Guide only (never a plain ADMIN, and never an unrelated Tour Guide) -- recipients are
+ * looked up fresh from the database every time, never hardcoded. Moves paymentStatus UNPAID ->
+ * PENDING ("payment submitted, awaiting staff review") -- this never confirms the booking itself;
+ * only an explicit staff action (PUT /bookings/:id, status=CONFIRMED) does that, in
+ * booking.service.ts.
  */
 export async function addPaymentProof(
   actor: Actor,
@@ -145,19 +146,24 @@ export async function addPaymentProof(
 
 /** Exported for reuse by booking.service.ts's createBooking, which now creates the Booking and
  *  its first PaymentProof together (checkout requires proof up front) rather than as two
- *  separate calls -- same notification, same recipients, just triggered from a different place. */
+ *  separate calls -- same notification, same recipients, just triggered from a different place.
+ *
+ *  Recipients are targeted, not broadcast to every staff account: SUPER_ADMIN (the role with full
+ *  system oversight) plus the tour's own assigned Tour Guide (if any) -- deliberately excludes the
+ *  plain ADMIN role, mirroring how the customer confirmation email only ever reaches the one
+ *  customer actually involved, not every account with a similar role. */
 export async function notifyPaymentProofSubmitted(
   booking: { id: number; tourId: number; userId: number; tourNameSnapshot: string; bookingDate: Date; paymentMethodId: number | null },
   proof: { fileUrl: string; createdAt: Date },
 ): Promise<void> {
-  const [tour, customer, staff, paymentMethod] = await Promise.all([
+  const [tour, customer, superAdmins, paymentMethod] = await Promise.all([
     prisma.tour.findUnique({ where: { id: booking.tourId }, include: { guide: { include: { user: true } } } }),
     prisma.user.findUnique({ where: { userId: booking.userId } }),
-    prisma.user.findMany({ where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] }, isActive: true } }),
+    prisma.user.findMany({ where: { role: 'SUPER_ADMIN', isActive: true } }),
     booking.paymentMethodId ? prisma.paymentMethod.findUnique({ where: { id: booking.paymentMethodId } }) : null,
   ])
 
-  const recipients = new Set<string>(staff.map((u) => u.email))
+  const recipients = new Set<string>(superAdmins.map((u) => u.email))
   if (tour?.guide?.user.email) recipients.add(tour.guide.user.email)
   if (recipients.size === 0) return
 
