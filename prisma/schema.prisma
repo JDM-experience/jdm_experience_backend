@@ -68,13 +68,15 @@ model User {
   cancellationRequests CancellationRequest[]
   wishlists     Wishlist[]
   notifications Notification[]
+  tourDateHolds TourDateHold[]
 
   @@map("users")
 }
 
-// Tour-level operational state (NOT per-date — per-date bookability is just "does a CONFIRMED
-// Booking already exist for this tourId+bookingDate", see booking.service.ts; there's no separate
-// availability/slot table). A new tour always starts PENDING; only an explicit admin confirmation
+// Tour-level operational state (NOT per-date — per-date bookability is "does an active (PENDING or
+// CONFIRMED) Booking, or an unexpired TourDateHold, already exist for this tourId+bookingDate",
+// see booking.service.ts/tourDateHold.service.ts; there's no separate availability/slot table). A
+// new tour always starts PENDING; only an explicit admin confirmation
 // (POST /tours/:id/confirm) moves it to AVAILABLE. From there, staff can move it manually between
 // AVAILABLE/UNAVAILABLE/UNDER_MAINTENANCE. See tour.service.ts.
 enum TourStatus {
@@ -173,6 +175,7 @@ model Tour {
   bookings    Booking[]
   reviews     Review[]
   wishlists   Wishlist[]
+  tourDateHolds TourDateHold[]
 
   @@index([guideId])
   @@index([status])
@@ -287,6 +290,29 @@ model Booking {
   @@index([tourId, bookingDate])
   @@index([paymentMethodId])
   @@map("bookings")
+}
+
+/// A short-lived reservation created the moment a customer selects a tour date on TourDetail --
+/// before checkout, before a Booking row exists. The unique constraint below is the actual
+/// atomicity guarantee behind "one tour + one date = one active booking/hold": under a genuine
+/// race between two customers, Postgres itself lets only one insert succeed, not a read-then-write
+/// check in application code. Rows are temporary (see HOLD_TTL_MINUTES in
+/// tourDateHold.service.ts) and cleaned up lazily -- an expired row is deleted the next time
+/// anyone tries to hold that same tour+date, rather than via a separate cleanup job.
+model TourDateHold {
+  id          Int      @id @default(autoincrement())
+  tourId      Int      @map("tour_id")
+  bookingDate DateTime @map("booking_date") @db.Date
+  userId      Int      @map("user_id")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  tour        Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([tourId, bookingDate])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("tour_date_holds")
 }
 
 /// Managed by SUPER_ADMIN (see payment-method.routes.ts) -- customers only ever see the active

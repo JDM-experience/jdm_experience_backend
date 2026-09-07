@@ -142,8 +142,29 @@ export const deleteTourImageResponseSchema = z
   .object({ success: z.literal(true), data: z.null() })
   .meta({ id: 'DeleteTourImageResponse' })
 
-// Future dates (YYYY-MM-DD) that already have a CONFIRMED booking for a tour — a date not in this
-// list is bookable (subject to the tour's own status and the JST same-day cutoff).
+// Future dates (YYYY-MM-DD) that are currently unavailable (an active booking or someone's
+// unexpired hold) for a tour — a date not in this list is bookable (subject to the tour's own
+// status and the JST same-day cutoff).
 export const bookedDatesResponseSchema = z
   .object({ success: z.literal(true), data: z.array(z.string()).meta({ example: ['2026-09-10', '2026-09-14'] }) })
   .meta({ id: 'BookedDatesResponse' })
+
+export const holdDateSchema = z.object({
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'bookingDate must be in YYYY-MM-DD format.'),
+})
+
+const tourDateHoldSchema = z
+  .object({
+    tourId: z.number().meta({ example: 1 }),
+    bookingDate: z.string().meta({ example: '2026-09-10' }),
+    expiresAt: z.string().meta({ example: '2026-09-06T10:41:00.000Z' }),
+  })
+  .meta({ id: 'TourDateHold' })
+
+export const tourDateHoldResponseSchema = z
+  .object({ success: z.literal(true), data: tourDateHoldSchema })
+  .meta({ id: 'TourDateHoldResponse' })
+
+export const releaseDateResponseSchema = z
+  .object({ success: z.literal(true), data: z.null() })
+  .meta({ id: 'ReleaseDateResponse' })

@@ -39,11 +39,17 @@ function toPublicBooking(b: BookingWithRelations) {
 
 /**
  * The one rule everything else re-validates against: no new booking after the JST cutoff, and
- * `participants` never exceeds the tour's seat cap. A tour-date itself is exclusive to at most
- * one CONFIRMED booking — like reserving the whole vehicle for that day, not a seat within it —
- * but that exclusivity is enforced at *confirmation* time (see updateBookingStatus), not here: a
- * PENDING request doesn't block another customer from also requesting the same date, so two
- * PENDING requests for one date can coexist until staff confirms one of them.
+ * `participants` never exceeds the tour's seat cap. A tour-date is exclusive to at most one active
+ * (PENDING or CONFIRMED) booking at a time -- "one tour + one date = one active booking/hold" --
+ * so this rejects a new request the moment *any* non-cancelled booking already exists for that
+ * date, not just a CONFIRMED one.
+ *
+ * The customer must currently hold this exact date (see tourDateHold.service.ts's holdDate,
+ * called from TourDetail the moment the date is picked) -- that hold's own database-level unique
+ * constraint is what actually prevents two customers from racing into this function for the same
+ * date at the same instant; this function just requires possession of it and consumes it as part
+ * of the same transaction that creates the Booking, so there's never a window where the hold is
+ * gone but no Booking exists yet, or vice versa.
  *
  * The checkout page is the only place a reservation is created, and it always has contact info,
  * a payment method, and payment proof by the time the customer confirms — so all three are
@@ -83,10 +89,10 @@ export async function createBooking(
   }
 
   const bookingDate = new Date(`${input.bookingDate}T00:00:00.000Z`)
-  const alreadyConfirmed = await prisma.booking.findFirst({
-    where: { tourId: input.tourId, bookingDate, status: 'CONFIRMED' },
+  const alreadyActive = await prisma.booking.findFirst({
+    where: { tourId: input.tourId, bookingDate, status: { in: ['PENDING', 'CONFIRMED'] } },
   })
-  if (alreadyConfirmed) {
+  if (alreadyActive) {
     throw new ApiError(409, 'This date is already booked for this tour. Please choose another date.')
   }
 
@@ -100,6 +106,14 @@ export async function createBooking(
   // Interactive transaction (not the array form) -- the proof's bookingId depends on the id the
   // booking create just generated, which the array form of $transaction can't reference.
   const [booking, proof] = await prisma.$transaction(async (tx) => {
+    const hold = await tx.tourDateHold.findUnique({
+      where: { tourId_bookingDate: { tourId: input.tourId, bookingDate } },
+    })
+    if (!hold || hold.userId !== actor.userId || hold.expiresAt < new Date()) {
+      throw new ApiError(400, 'This date is no longer held for you — please reselect the date and try again.')
+    }
+    await tx.tourDateHold.delete({ where: { id: hold.id } })
+
     const createdBooking = await tx.booking.create({
       data: {
         userId: actor.userId,
@@ -317,10 +331,10 @@ export async function updateBookingStatus(
         throw new ApiError(400, 'This booking has no payment proof and cannot be confirmed.')
       }
 
-      // This is where per-date exclusivity is actually enforced (createBooking only rejects a
-      // *new* request against an already-CONFIRMED date; two PENDING requests for the same date
-      // are allowed to coexist until one is confirmed). Guarded by the transaction so confirming
-      // two competing PENDING bookings for the same date concurrently can't both succeed.
+      // Harmless second safety net -- createBooking's own PENDING/CONFIRMED exclusivity check
+      // already prevents a second active booking for this date from ever being created, so this
+      // should never actually find anything in normal operation. Kept as a guard against any
+      // historical row that predates that check, inside the same transaction as the update below.
       const conflicting = await tx.booking.findFirst({
         where: { tourId: existing.tourId, bookingDate: existing.bookingDate, status: 'CONFIRMED', id: { not: id } },
       })

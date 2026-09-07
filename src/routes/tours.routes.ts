@@ -5,9 +5,11 @@ import {
   create,
   getContact,
   getOne,
+  holdDate,
   list,
   listGuides,
   myTours,
+  releaseDate,
   remove,
   removeImage,
   update,
@@ -23,8 +25,11 @@ import {
   createTourSchema,
   deleteTourImageResponseSchema,
   deleteTourResponseSchema,
+  holdDateSchema,
+  releaseDateResponseSchema,
   tourContactResponseSchema,
   tourContactSchema,
+  tourDateHoldResponseSchema,
   tourGuidesListResponseSchema,
   tourImageResponseSchema,
   tourListQuerySchema,
@@ -92,14 +97,54 @@ export const toursRoutes: RouteDefinition[] = [
     method: 'get',
     path: '/tours/:tourId/booked-dates',
     handler: bookedDates,
-    summary: "List a tour's future dates that already have a CONFIRMED booking",
+    summary: "List a tour's future dates that are currently unavailable",
     description:
       'A date not in this list is bookable (subject to the tour\'s own status and the JST ' +
       'same-day cutoff) — powers the customer-facing date picker\'s disabled dates. A tour-date ' +
-      'is exclusive to one CONFIRMED booking at a time; see POST /bookings.',
+      'is exclusive to one active (PENDING or CONFIRMED) booking, or one unexpired hold, at a ' +
+      'time; see POST /tours/:tourId/hold-date and POST /bookings.',
     responses: {
-      200: { description: 'Booked dates (YYYY-MM-DD), soonest first.', schema: bookedDatesResponseSchema },
+      200: { description: 'Unavailable dates (YYYY-MM-DD), soonest first.', schema: bookedDatesResponseSchema },
       400: { description: 'tourId was not a positive integer.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'post',
+    path: '/tours/:tourId/hold-date',
+    handler: [requireAuth, validateBody(holdDateSchema), holdDate],
+    summary: 'Atomically reserve a tour date for the calling customer, temporarily',
+    description:
+      'Called the moment a customer selects a date on the Tour Details page, before checkout. ' +
+      'Rejected with 409 if the date already has an active booking or another customer\'s ' +
+      'unexpired hold -- enforced by a real database unique constraint, safe under a race between ' +
+      'two customers selecting the same date at the same instant, not just a read-then-write ' +
+      'check. The hold expires after a short TTL if checkout is never completed; re-holding the ' +
+      'same date (e.g. reaching the checkout page) refreshes it. POST /bookings requires the ' +
+      'caller to currently hold the date and consumes the hold when the booking is created.',
+    request: { body: holdDateSchema },
+    responses: {
+      201: { description: 'Date held.', schema: tourDateHoldResponseSchema },
+      400: { description: 'Booking closed for today, or the tour is not AVAILABLE.', schema: apiErrorResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      404: { description: 'No tour with that id, or not available for booking.', schema: apiErrorResponseSchema },
+      409: { description: 'This date is currently unavailable.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
+    },
+  },
+  {
+    method: 'delete',
+    path: '/tours/:tourId/hold-date',
+    handler: [requireAuth, validateQuery(holdDateSchema), releaseDate],
+    summary: "Release the calling customer's hold on a date, if any",
+    description:
+      'Best-effort/idempotent -- called when a customer picks a different date or navigates away ' +
+      'without completing checkout, so the slot frees up sooner than the full TTL. bookingDate is ' +
+      'a query parameter (?bookingDate=YYYY-MM-DD), not a body.',
+    request: { query: holdDateSchema },
+    responses: {
+      200: { description: 'Hold released (or none existed).', schema: releaseDateResponseSchema },
+      401: { description: 'Missing or invalid bearer token.', schema: apiErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
   // Staff, or a Tour Guide (auto-assigned as the tour's owner on create -- see tour.service.ts).

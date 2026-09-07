@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ApiError } from '../middleware/errorHandler'
 import * as tourService from '../services/tour.service'
+import * as tourDateHoldService from '../services/tourDateHold.service'
 import type { TourSortBy } from '../services/tour.service'
 import { tourChildParamSchema, tourIdParamSchema, tourImageParamSchema } from '../validators/tour.validator'
 import type { TourStatus } from '../generated/prisma/client'
@@ -133,6 +134,28 @@ export async function bookedDates(req: Request, res: Response, next: NextFunctio
   try {
     const { tourId } = parseParams(tourChildParamSchema, req.params)
     res.json({ success: true, data: await tourService.listBookedDates(tourId) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function holdDate(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { tourId } = parseParams(tourChildParamSchema, req.params)
+    const data = await tourDateHoldService.holdDate(req.user!, tourId, req.body.bookingDate)
+    res.status(201).json({ success: true, data })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function releaseDate(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { tourId } = parseParams(tourChildParamSchema, req.params)
+    // Query param, not a body -- the frontend's shared httpClient.delete() doesn't send a request
+    // body, so this is the one hold-date route that takes bookingDate via ?bookingDate=.
+    await tourDateHoldService.releaseDate(req.user!, tourId, req.query.bookingDate as string)
+    res.json({ success: true, data: null })
   } catch (error) {
     next(error)
   }

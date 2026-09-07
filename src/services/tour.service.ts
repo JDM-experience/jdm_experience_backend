@@ -305,14 +305,24 @@ export async function updateTourContact(
   return { contactName: updated.contactName, contactEmail: updated.contactEmail, contactPhone: updated.contactPhone }
 }
 
-/** Which future dates already have a CONFIRMED booking (and so can't be booked again) — powers
- *  the customer-facing date picker's disabled-dates list. See booking.service.ts for the same
- *  invariant enforced authoritatively at booking-create/confirm time. */
+/** Which future dates are currently unavailable -- either an active (PENDING or CONFIRMED)
+ *  booking already exists, or someone currently holds it (see tourDateHold.service.ts). Powers
+ *  the customer-facing date picker's disabled-dates list only; the actual enforcement is
+ *  holdDate's own unique-constraint-backed atomic check and createBooking's re-verification, both
+ *  in booking.service.ts/tourDateHold.service.ts -- same "non-fatal, worst case the backend
+ *  rejects it" discipline as everywhere else this list is fetched. */
 export async function listBookedDates(tourId: number): Promise<string[]> {
-  const rows = await prisma.booking.findMany({
-    where: { tourId, status: 'CONFIRMED', bookingDate: { gte: new Date(new Date().toISOString().slice(0, 10)) } },
-    select: { bookingDate: true },
-    orderBy: { bookingDate: 'asc' },
-  })
-  return rows.map((r) => r.bookingDate.toISOString().slice(0, 10))
+  const today = new Date(new Date().toISOString().slice(0, 10))
+  const [bookings, holds] = await Promise.all([
+    prisma.booking.findMany({
+      where: { tourId, status: { in: ['PENDING', 'CONFIRMED'] }, bookingDate: { gte: today } },
+      select: { bookingDate: true },
+    }),
+    prisma.tourDateHold.findMany({
+      where: { tourId, bookingDate: { gte: today }, expiresAt: { gt: new Date() } },
+      select: { bookingDate: true },
+    }),
+  ])
+  const dates = new Set([...bookings, ...holds].map((r) => r.bookingDate.toISOString().slice(0, 10)))
+  return [...dates].sort()
 }
