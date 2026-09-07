@@ -191,3 +191,62 @@ export async function getPolicyForAdmin(type: PolicyType) {
   if (!row) return { type, title: type, content: '' }
   return toPublicPolicyPage(row)
 }
+
+function toPublicFaq(row: { id: number; question: string; answer: string; displayOrder: number; isPublished: boolean }) {
+  return { id: row.id, question: row.question, answer: row.answer, displayOrder: row.displayOrder, isPublished: row.isPublished }
+}
+
+/** Public -- only published FAQs, in display order. Same "unpublished/unset simply isn't shown"
+ *  convention as listPolicies/an unset social link. */
+export async function listPublicFaqs() {
+  const rows = await prisma.faq.findMany({ where: { isPublished: true }, orderBy: { displayOrder: 'asc' } })
+  return rows.map(toPublicFaq)
+}
+
+/** Staff-only -- every FAQ including unpublished drafts, for the admin editor table. */
+export async function listFaqsForAdmin() {
+  const rows = await prisma.faq.findMany({ orderBy: { displayOrder: 'asc' } })
+  return rows.map(toPublicFaq)
+}
+
+export async function createFaq(
+  actor: Actor,
+  input: { question: string; answer: string; displayOrder?: number; isPublished?: boolean },
+) {
+  const row = await prisma.faq.create({
+    data: {
+      question: input.question,
+      answer: input.answer,
+      displayOrder: input.displayOrder ?? 0,
+      isPublished: input.isPublished ?? true,
+    },
+  })
+
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'settings.faq_create', entity: 'faqs', entityId: row.id })
+  return toPublicFaq(row)
+}
+
+export async function updateFaq(
+  actor: Actor,
+  id: number,
+  input: { question?: string; answer?: string; displayOrder?: number; isPublished?: boolean },
+) {
+  const existing = await prisma.faq.findUnique({ where: { id } })
+  if (!existing) throw new ApiError(404, 'FAQ not found.')
+
+  const row = await prisma.faq.update({
+    where: { id },
+    data: { question: input.question, answer: input.answer, displayOrder: input.displayOrder, isPublished: input.isPublished },
+  })
+
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'settings.faq_update', entity: 'faqs', entityId: id })
+  return toPublicFaq(row)
+}
+
+export async function deleteFaq(actor: Actor, id: number): Promise<void> {
+  const existing = await prisma.faq.findUnique({ where: { id } })
+  if (!existing) throw new ApiError(404, 'FAQ not found.')
+
+  await prisma.faq.delete({ where: { id } })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'settings.faq_delete', entity: 'faqs', entityId: id })
+}

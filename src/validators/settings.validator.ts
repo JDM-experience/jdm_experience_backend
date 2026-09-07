@@ -121,3 +121,37 @@ export const policyPageResponseSchema = z
 export const policyPagesListResponseSchema = z
   .object({ success: z.literal(true), data: z.array(policyPageSchema) })
   .meta({ id: 'PolicyPagesListResponse' })
+
+export const createFaqSchema = z.object({
+  question: z.string().trim().min(1, 'Question is required.').max(500),
+  answer: z.string().trim().min(1, 'Answer is required.').max(5000),
+  displayOrder: z.number().int().nonnegative().default(0),
+  isPublished: z.boolean().default(true),
+})
+
+export const updateFaqSchema = z
+  .object({
+    question: z.string().trim().min(1).max(500).optional(),
+    answer: z.string().trim().min(1).max(5000).optional(),
+    displayOrder: z.number().int().nonnegative().optional(),
+    isPublished: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })
+
+export const faqIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+
+const faqSchema = z
+  .object({
+    id: z.number().meta({ example: 1 }),
+    question: z.string().meta({ example: 'What should I bring on the tour?' }),
+    answer: z.string().meta({ example: 'Comfortable shoes and a valid ID.' }),
+    displayOrder: z.number().int().meta({ example: 0 }),
+    isPublished: z.boolean().meta({ example: true }),
+  })
+  .meta({ id: 'Faq' })
+
+export const faqResponseSchema = z.object({ success: z.literal(true), data: faqSchema }).meta({ id: 'FaqResponse' })
+export const faqsListResponseSchema = z
+  .object({ success: z.literal(true), data: z.array(faqSchema) })
+  .meta({ id: 'FaqsListResponse' })
+export const deleteFaqResponseSchema = z.object({ success: z.literal(true), data: z.null() }).meta({ id: 'DeleteFaqResponse' })
