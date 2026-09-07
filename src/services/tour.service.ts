@@ -5,14 +5,17 @@ import { Prisma, type Role, type TourStatus } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
 
-const TOUR_INCLUDE = {
+// Exported for reuse by wishlist.service.ts, which needs the exact same tour-shaping logic when
+// listing a customer's saved tours (via a nested `tour: { include: TOUR_INCLUDE }`) rather than
+// duplicating this mapping.
+export const TOUR_INCLUDE = {
   images: { orderBy: { sortOrder: 'asc' as const } },
   guide: { include: { user: true } },
 } satisfies Prisma.TourInclude
 
 type TourWithRelations = Prisma.TourGetPayload<{ include: typeof TOUR_INCLUDE }>
 
-function toPublicTour(tour: TourWithRelations) {
+export function toPublicTour(tour: TourWithRelations) {
   return {
     id: tour.id,
     name: tour.name,
@@ -54,6 +57,8 @@ export type TourSortBy = keyof typeof SORT_FIELD_MAP
 export async function listTours(filter?: {
   status?: TourStatus
   search?: string
+  minPrice?: number
+  maxPrice?: number
   sortBy?: TourSortBy
   sortOrder?: 'asc' | 'desc'
 }) {
@@ -66,6 +71,12 @@ export async function listTours(filter?: {
       { name: { contains: filter.search, mode: 'insensitive' } },
       { description: { contains: filter.search, mode: 'insensitive' } },
     ]
+  }
+  if (filter?.minPrice !== undefined || filter?.maxPrice !== undefined) {
+    where.price = {
+      ...(filter.minPrice !== undefined ? { gte: filter.minPrice } : {}),
+      ...(filter.maxPrice !== undefined ? { lte: filter.maxPrice } : {}),
+    }
   }
 
   // Unchanged default (id desc) when no sort is requested, so callers that don't ask for a

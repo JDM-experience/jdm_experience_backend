@@ -44,10 +44,11 @@ export const toursRoutes: RouteDefinition[] = [
     handler: [validateQuery(tourListQuerySchema), list],
     summary: 'List tours',
     description:
-      'Search (name/description, case-insensitive) and sort are performed by the database, not ' +
-      'the client — see tour.service.ts. `sortBy` is whitelisted (name/price/seats/createdAt/status); ' +
-      'defaults to id desc when omitted. `search` matches tours whose name or description contains ' +
-      'the term.',
+      'Search (name/description, case-insensitive), price range, status, and sort are all ' +
+      'performed by the database, not the client — see tour.service.ts. `sortBy` is whitelisted ' +
+      '(name/price/seats/createdAt/status); defaults to id desc when omitted. `search` matches ' +
+      'tours whose name or description contains the term. `minPrice`/`maxPrice` filter on `price` ' +
+      '(inclusive); rejected with 422 if minPrice > maxPrice.',
     request: { query: tourListQuerySchema },
     responses: {
       200: { description: 'Tours, optionally filtered by status/search and sorted.', schema: toursListResponseSchema },

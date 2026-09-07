@@ -66,6 +66,7 @@ model User {
   auditLogs     AuditLog[]
   reviews       Review[]
   cancellationRequests CancellationRequest[]
+  wishlists     Wishlist[]
 
   @@map("users")
 }
@@ -170,10 +171,12 @@ model Tour {
   images      TourImage[]
   bookings    Booking[]
   reviews     Review[]
+  wishlists   Wishlist[]
 
   @@index([guideId])
   @@index([status])
   @@index([isDeleted])
+  @@index([price])
   @@map("tours")
 }
 
@@ -195,6 +198,25 @@ model Review {
   @@unique([userId, tourId])
   @@index([tourId])
   @@map("reviews")
+}
+
+/// A customer saving a tour for later viewing -- separate from Bookings entirely (see
+/// wishlist.service.ts): booking/paying/confirming a tour never touches this table. One entry per
+/// user per tour, enforced by the unique constraint below. Tours are soft-deleted (never actually
+/// removed, see Tour.isDeleted), so this FK never breaks; listMyWishlist filters out deleted
+/// tours at read time instead of relying on cascade cleanup.
+model Wishlist {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  tourId    Int      @map("tour_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tour      Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tourId])
+  @@index([userId])
+  @@index([tourId])
+  @@map("wishlists")
 }
 
 /// Metadata only — the actual file lives in object storage, never the database.

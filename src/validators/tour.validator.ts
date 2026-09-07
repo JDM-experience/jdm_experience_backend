@@ -62,18 +62,25 @@ export const tourContactResponseSchema = z
   .object({ success: z.literal(true), data: tourContactResponseDataSchema })
   .meta({ id: 'TourContactResponse' })
 
-export const tourListQuerySchema = z.object({
-  status: statusEnum.optional(),
-  // Empty string behaves like "not provided" — a cleared search box submits `?search=`.
-  search: z
-    .string()
-    .trim()
-    .max(200)
-    .optional()
-    .transform((v) => (v ? v : undefined)),
-  sortBy: tourSortByEnum.optional(),
-  sortOrder: sortOrderEnum.optional(),
-})
+export const tourListQuerySchema = z
+  .object({
+    status: statusEnum.optional(),
+    // Empty string behaves like "not provided" — a cleared search box submits `?search=`.
+    search: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+    minPrice: z.coerce.number().nonnegative().optional(),
+    maxPrice: z.coerce.number().nonnegative().optional(),
+    sortBy: tourSortByEnum.optional(),
+    sortOrder: sortOrderEnum.optional(),
+  })
+  .refine((data) => data.minPrice === undefined || data.maxPrice === undefined || data.minPrice <= data.maxPrice, {
+    message: 'minPrice must not be greater than maxPrice.',
+    path: ['minPrice'],
+  })
 export const tourIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 export const tourChildParamSchema = z.object({ tourId: z.coerce.number().int().positive() })
 export const tourImageParamSchema = z.object({
@@ -100,7 +107,8 @@ const tourImageSchema = z
   })
   .meta({ id: 'TourImage' })
 
-const tourSchema = z
+// Exported for reuse by wishlist.validator.ts, which embeds a full Tour in each wishlist item.
+export const tourSchema = z
   .object({
     id: z.number().meta({ example: 1 }),
     name: z.string().meta({ example: 'Mt. Fuji JDM Drive Tour' }),

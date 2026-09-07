@@ -17,9 +17,11 @@ export async function list(req: Request, res: Response, next: NextFunction) {
     // tour.validator.ts's tourSortByEnum for the actual sortBy whitelist enforcement.
     const status = req.query.status as TourStatus | undefined
     const search = req.query.search as string | undefined
+    const minPrice = req.query.minPrice as number | undefined
+    const maxPrice = req.query.maxPrice as number | undefined
     const sortBy = req.query.sortBy as TourSortBy | undefined
     const sortOrder = req.query.sortOrder as 'asc' | 'desc' | undefined
-    res.json({ success: true, data: await tourService.listTours({ status, search, sortBy, sortOrder }) })
+    res.json({ success: true, data: await tourService.listTours({ status, search, minPrice, maxPrice, sortBy, sortOrder }) })
   } catch (error) {
     next(error)
   }

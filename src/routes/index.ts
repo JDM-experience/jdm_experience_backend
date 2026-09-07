@@ -17,6 +17,7 @@ import { toursRoutes } from './tours.routes'
 import { uploadsRoutes } from './uploads.routes'
 import { usersRoutes } from './users.routes'
 import { weatherRoutes } from './weather.routes'
+import { wishlistRoutes } from './wishlist.routes'
 
 // The single source of truth for every route — both the Express router below
 // and the OpenAPI doc (src/docs/openapi.ts) are generated from this array,
@@ -40,6 +41,7 @@ export const allRoutes: RouteDefinition[] = [
   ...withTag('Weather', weatherRoutes),
   ...withTag('Currency', currencyRoutes),
   ...withTag('Dashboard', dashboardRoutes),
+  ...withTag('Wishlist', wishlistRoutes),
 ]
 
 const router = Router()
