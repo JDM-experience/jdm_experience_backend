@@ -23,6 +23,7 @@ const meDataSchema = z
     authProvider: z.literal('AUTH0').meta({ example: 'AUTH0' }),
     isActive: z.boolean().meta({ example: true }),
     createdAt: z.string().meta({ example: '2026-08-11T10:26:53.912Z' }),
+    phone: z.string().nullable().meta({ example: '+81-90-1234-5678' }),
   })
   .meta({ id: 'MeData' })
 
@@ -32,3 +33,14 @@ const meDataSchema = z
 export const meResponseSchema = z
   .object({ success: z.literal(true), data: meDataSchema })
   .meta({ id: 'MeResponse' })
+
+// Self-service profile edit -- only these two fields are ever accepted, regardless of what a
+// client sends. role/email/isActive/userId can never reach userService.updateOwnProfile through
+// this path.
+export const updateOwnProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(1, 'Please enter your full name.').max(255),
+    phone: z.string().trim().max(50, 'Phone number is too long.'),
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, { message: 'No fields to update.' })

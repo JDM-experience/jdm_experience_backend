@@ -169,7 +169,7 @@ export async function createTour(
     include: TOUR_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'tour.create', entity: 'tours', entityId: tour.id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.create', entity: 'tours', entityId: tour.id })
   return toPublicTour(tour)
 }
 
@@ -221,7 +221,7 @@ export async function updateTour(
     include: TOUR_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'tour.update', entity: 'tours', entityId: tourId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.update', entity: 'tours', entityId: tourId })
   return toPublicTour(tour)
 }
 
@@ -236,7 +236,7 @@ export async function deleteTour(actor: Actor, tourId: number): Promise<void> {
   if (!tour || tour.isDeleted) throw new ApiError(404, 'Tour not found.')
 
   await prisma.tour.update({ where: { id: tourId }, data: { isDeleted: true, deletedAt: new Date() } })
-  await recordAuditLog({ userId: actor.userId, action: 'tour.delete', entity: 'tours', entityId: tourId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.delete', entity: 'tours', entityId: tourId })
 }
 
 /** Staff-only: moves a PENDING tour to AVAILABLE. The one place `status` transitions automatically
@@ -253,24 +253,26 @@ export async function confirmTour(actor: Actor, tourId: number) {
     data: { status: 'AVAILABLE' },
     include: TOUR_INCLUDE,
   })
-  await recordAuditLog({ userId: actor.userId, action: 'tour.confirm', entity: 'tours', entityId: tourId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.confirm', entity: 'tours', entityId: tourId })
   return toPublicTour(updated)
 }
 
-export async function addTourImage(tourId: number, input: { imageUrl: string; sortOrder: number }) {
+export async function addTourImage(actor: Actor, tourId: number, input: { imageUrl: string; sortOrder: number }) {
   const tour = await prisma.tour.findUnique({ where: { id: tourId } })
   if (!tour) throw new ApiError(404, 'Tour not found.')
 
   const image = await prisma.tourImage.create({
     data: { tourId, imageUrl: input.imageUrl, sortOrder: input.sortOrder },
   })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.image_update', entity: 'tours', entityId: tourId })
   return { id: image.id, imageUrl: image.imageUrl, sortOrder: image.sortOrder }
 }
 
-export async function removeTourImage(tourId: number, imageId: number): Promise<void> {
+export async function removeTourImage(actor: Actor, tourId: number, imageId: number): Promise<void> {
   const image = await prisma.tourImage.findUnique({ where: { id: imageId } })
   if (!image || image.tourId !== tourId) throw new ApiError(404, 'Tour image not found.')
   await prisma.tourImage.delete({ where: { id: imageId } })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.image_update', entity: 'tours', entityId: tourId })
 }
 
 // Ownership (SUPER_ADMIN/ADMIN: any tour; TOUR_GUIDE: only their own) is already enforced by the
@@ -299,7 +301,7 @@ export async function updateTourContact(
       contactPhone: input.contactPhone,
     },
   })
-  await recordAuditLog({ userId: actor.userId, action: 'tour.contact_update', entity: 'tours', entityId: tourId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'tour.contact_update', entity: 'tours', entityId: tourId })
   return { contactName: updated.contactName, contactEmail: updated.contactEmail, contactPhone: updated.contactPhone }
 }
 

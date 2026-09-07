@@ -1,6 +1,8 @@
-import { getMe, ping } from '../controllers/auth.controller'
+import { getMe, ping, updateMe } from '../controllers/auth.controller'
 import { checkJwt, requireAuth } from '../middleware/auth.middleware'
-import { authErrorResponseSchema, meResponseSchema, pingResponseSchema } from '../validators/auth.validator'
+import { validateBody } from '../middleware/validate'
+import { apiErrorResponseSchema } from '../validators/common.validator'
+import { authErrorResponseSchema, meResponseSchema, pingResponseSchema, updateOwnProfileSchema } from '../validators/auth.validator'
 import type { RouteDefinition } from './route-definition'
 
 export const authRoutes: RouteDefinition[] = [
@@ -27,6 +29,23 @@ export const authRoutes: RouteDefinition[] = [
       200: { description: 'Authenticated user profile.', schema: meResponseSchema },
       401: { description: 'Missing, invalid, or expired Auth0 access token.', schema: authErrorResponseSchema },
       403: { description: 'Account has been deactivated.', schema: authErrorResponseSchema },
+    },
+  },
+  {
+    method: 'patch',
+    path: '/auth/me',
+    handler: [requireAuth, validateBody(updateOwnProfileSchema), updateMe],
+    summary: "Update the authenticated user's own profile",
+    description:
+      'Only fullName/phone are ever accepted, regardless of what is sent -- role, email, isActive, ' +
+      'and every other administrative field can never be changed through this endpoint. The caller ' +
+      'is always determined from the Auth0 token, never a body/param userId.',
+    request: { body: updateOwnProfileSchema },
+    responses: {
+      200: { description: 'Profile updated.', schema: meResponseSchema },
+      401: { description: 'Missing, invalid, or expired Auth0 access token.', schema: authErrorResponseSchema },
+      403: { description: 'Account has been deactivated.', schema: authErrorResponseSchema },
+      422: { description: 'Validation failed.', schema: apiErrorResponseSchema },
     },
   },
 ]

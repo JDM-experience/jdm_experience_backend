@@ -49,6 +49,7 @@ export async function updateContactSettings(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.contact_update',
     entity: 'app_settings',
     entityId: SETTINGS_ID,
@@ -84,6 +85,7 @@ export async function createSocialLink(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.social_link_create',
     entity: 'social_media_links',
     entityId: row.id,
@@ -106,6 +108,7 @@ export async function updateSocialLink(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.social_link_update',
     entity: 'social_media_links',
     entityId: id,
@@ -120,6 +123,7 @@ export async function deleteSocialLink(actor: Actor, id: number): Promise<void> 
   await prisma.socialMediaLink.delete({ where: { id } })
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.social_link_delete',
     entity: 'social_media_links',
     entityId: id,
@@ -143,6 +147,7 @@ export async function updateAboutContent(actor: Actor, input: { title?: string; 
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.about_update',
     entity: 'about_content',
     entityId: ABOUT_ID,
@@ -171,6 +176,7 @@ export async function updatePolicy(actor: Actor, type: PolicyType, input: { titl
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'settings.policy_update',
     entity: 'policy_pages',
     entityId: row.id,

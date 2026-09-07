@@ -100,7 +100,7 @@ export async function createReview(actor: Actor, tourId: number, input: { rating
     include: REVIEW_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'review.create', entity: 'reviews', entityId: row.id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'review.create', entity: 'reviews', entityId: row.id })
   return toPublicReview(row)
 }
 
@@ -121,7 +121,7 @@ export async function updateReview(actor: Actor, id: number, input: { rating?: n
     include: REVIEW_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'review.update', entity: 'reviews', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'review.update', entity: 'reviews', entityId: id })
   return toPublicReview(row)
 }
 
@@ -136,5 +136,5 @@ export async function deleteReview(actor: Actor, id: number): Promise<void> {
   }
 
   await prisma.review.delete({ where: { id } })
-  await recordAuditLog({ userId: actor.userId, action: 'review.delete', entity: 'reviews', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'review.delete', entity: 'reviews', entityId: id })
 }

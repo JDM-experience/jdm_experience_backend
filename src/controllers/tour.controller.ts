@@ -112,7 +112,7 @@ export async function confirm(req: Request, res: Response, next: NextFunction) {
 export async function addImage(req: Request, res: Response, next: NextFunction) {
   try {
     const { tourId } = parseParams(tourChildParamSchema, req.params)
-    const image = await tourService.addTourImage(tourId, req.body)
+    const image = await tourService.addTourImage(req.user!, tourId, req.body)
     res.status(201).json({ success: true, data: image })
   } catch (error) {
     next(error)
@@ -122,7 +122,7 @@ export async function addImage(req: Request, res: Response, next: NextFunction) 
 export async function removeImage(req: Request, res: Response, next: NextFunction) {
   try {
     const { tourId, imageId } = parseParams(tourImageParamSchema, req.params)
-    await tourService.removeTourImage(tourId, imageId)
+    await tourService.removeTourImage(req.user!, tourId, imageId)
     res.json({ success: true, data: null })
   } catch (error) {
     next(error)

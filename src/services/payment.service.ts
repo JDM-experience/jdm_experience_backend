@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
+import { recordAuditLog } from './auditLog.service'
 import { sendPaymentProofSubmittedEmail } from './email.service'
+import { createNotification } from './notification.service'
 import type { Payment, PaymentStatus, Role } from '../generated/prisma/client'
 
 type Actor = { userId: number; role: Role }
@@ -65,7 +67,25 @@ export async function recordPayment(
 
   if (input.status === 'PAID') {
     await prisma.booking.update({ where: { id: input.bookingId }, data: { paymentStatus: 'PAID' } })
+
+    void createNotification({
+      userId: booking.userId,
+      type: 'PAYMENT_CONFIRMED',
+      title: 'Payment confirmed',
+      message: `Your payment for booking JDM-${booking.id} has been confirmed.`,
+      relatedEntityType: 'booking',
+      relatedEntityId: booking.id,
+    }).catch((error) => console.error('[payment.service] Failed to create notification:', error))
   }
+
+  await recordAuditLog({
+    userId: actor.userId,
+    role: actor.role,
+    action: 'payment.record',
+    entity: 'payments',
+    entityId: payment.id,
+    metadata: { bookingId: input.bookingId, amount: input.amount, status: input.status },
+  })
 
   return toPublicPayment(payment)
 }
@@ -101,6 +121,15 @@ export async function addPaymentProof(
 
   void notifyPaymentProofSubmitted(booking, proof).catch((error) => {
     console.error('[payment.service] Failed to send payment-proof notification emails:', error)
+  })
+
+  await recordAuditLog({
+    userId: actor.userId,
+    role: actor.role,
+    action: 'payment.proof_upload',
+    entity: 'payment_proofs',
+    entityId: proof.id,
+    metadata: { bookingId },
   })
 
   return {

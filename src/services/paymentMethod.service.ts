@@ -38,7 +38,7 @@ export async function createPaymentMethod(
   input: { name: string; description?: string; imageUrl?: string; isActive: boolean },
 ) {
   const row = await prisma.paymentMethod.create({ data: input })
-  await recordAuditLog({ userId: actor.userId, action: 'payment_method.create', entity: 'payment_methods', entityId: row.id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'payment_method.create', entity: 'payment_methods', entityId: row.id })
   return toPublicPaymentMethod(row)
 }
 
@@ -51,7 +51,7 @@ export async function updatePaymentMethod(
   if (!existing) throw new ApiError(404, 'Payment method not found.')
 
   const row = await prisma.paymentMethod.update({ where: { id }, data: input })
-  await recordAuditLog({ userId: actor.userId, action: 'payment_method.update', entity: 'payment_methods', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'payment_method.update', entity: 'payment_methods', entityId: id })
   return toPublicPaymentMethod(row)
 }
 
@@ -63,5 +63,5 @@ export async function deletePaymentMethod(actor: Actor, id: number): Promise<voi
   if (!existing) throw new ApiError(404, 'Payment method not found.')
 
   await prisma.paymentMethod.delete({ where: { id } })
-  await recordAuditLog({ userId: actor.userId, action: 'payment_method.delete', entity: 'payment_methods', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'payment_method.delete', entity: 'payment_methods', entityId: id })
 }

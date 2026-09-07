@@ -4,6 +4,7 @@ import { isBookingAllowed } from '../lib/dateTime'
 import { getBookingCutoffHour } from './settings.service'
 import { recordAuditLog } from './auditLog.service'
 import { sendBookingConfirmedEmail } from './email.service'
+import { createNotification } from './notification.service'
 import { notifyPaymentProofSubmitted } from './payment.service'
 import { Prisma, type BookingStatus, type PaymentStatus, type Role } from '../generated/prisma/client'
 
@@ -138,6 +139,15 @@ export async function createBooking(
 
   void notifyPaymentProofSubmitted(booking, proof).catch((error) => {
     console.error('[booking.service] Failed to send payment-proof notification emails:', error)
+  })
+
+  await recordAuditLog({
+    userId: actor.userId,
+    role: actor.role,
+    action: 'booking.create',
+    entity: 'bookings',
+    entityId: booking.id,
+    metadata: { tourId: booking.tourId, bookingDate: input.bookingDate },
   })
 
   return toPublicBooking(booking)
@@ -351,6 +361,7 @@ export async function updateBookingStatus(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'booking.status_update',
     entity: 'bookings',
     entityId: id,
@@ -377,6 +388,30 @@ export async function updateBookingStatus(
         contactPhone: tour?.contactPhone ?? null,
       })
     }
+
+    void createNotification({
+      userId: updated.userId,
+      type: 'BOOKING_CONFIRMED',
+      title: 'Booking confirmed',
+      message: `Your booking JDM-${updated.id} for ${updated.tourNameSnapshot} has been confirmed.`,
+      relatedEntityType: 'booking',
+      relatedEntityId: updated.id,
+    }).catch((error) => console.error('[booking.service] Failed to create notification:', error))
+  }
+
+  // Distinguishes the staff "reject payment" path (PUT /bookings/:id with an explicit
+  // paymentStatus: 'FAILED') from a customer's own self-cancel (cancelOwnBooking never sends
+  // paymentStatus explicitly, even though it lands on the same FAILED value above) -- only the
+  // staff-initiated rejection is something the customer needs to be notified about.
+  if (input.status === 'CANCELLED' && input.paymentStatus === 'FAILED') {
+    void createNotification({
+      userId: updated.userId,
+      type: 'PAYMENT_REJECTED',
+      title: 'Payment rejected',
+      message: `Your payment for booking JDM-${updated.id} was rejected. Please review and resubmit.`,
+      relatedEntityType: 'booking',
+      relatedEntityId: updated.id,
+    }).catch((error) => console.error('[booking.service] Failed to create notification:', error))
   }
 
   return toPublicBooking(updated)

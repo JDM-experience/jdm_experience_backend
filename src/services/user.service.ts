@@ -83,6 +83,7 @@ export async function createUser(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'user.create',
     entity: 'users',
     entityId: user.userId,
@@ -109,13 +110,24 @@ export async function updateUser(
     await ensureTourGuideProfile(targetId)
   }
 
-  if (input.role && input.role !== target.role) {
+  // One diff-style log per call covering whatever actually changed (name/email/role/isActive),
+  // rather than a separate hardcoded log per field -- "User updated" and "User role changed" are
+  // both satisfied by the same entry, since the metadata naturally includes `role` whenever that's
+  // what changed.
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  if (input.fullName !== undefined && input.fullName !== target.fullName) changes.fullName = { from: target.fullName, to: input.fullName }
+  if (input.email !== undefined && input.email !== target.email) changes.email = { from: target.email, to: input.email }
+  if (input.role !== undefined && input.role !== target.role) changes.role = { from: target.role, to: input.role }
+  if (input.isActive !== undefined && input.isActive !== target.isActive) changes.isActive = { from: target.isActive, to: input.isActive }
+
+  if (Object.keys(changes).length > 0) {
     await recordAuditLog({
       userId: actor.userId,
-      action: 'user.role_change',
+      role: actor.role,
+      action: 'user.update',
       entity: 'users',
       entityId: targetId,
-      metadata: { from: target.role, to: input.role },
+      metadata: changes,
     })
   }
 
@@ -130,5 +142,49 @@ export async function deactivateUser(actor: Actor, targetId: number): Promise<vo
   }
 
   await prisma.user.update({ where: { userId: targetId }, data: { isActive: false } })
-  await recordAuditLog({ userId: actor.userId, action: 'user.deactivate', entity: 'users', entityId: targetId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'user.deactivate', entity: 'users', entityId: targetId })
+}
+
+/**
+ * Self-service profile edit -- distinct from updateUser (SUPER_ADMIN-only, any user, any field).
+ * Only ever touches the caller's own row (there is no targetId parameter -- structurally
+ * impossible to edit anyone else), and only fullName/phone are accepted regardless of what a
+ * client sends (enforced by updateOwnProfileSchema, not just by this function's signature).
+ * Phone lives on the Customer profile-extension row (same upsert customer.service.ts's
+ * updateCustomerProfile already does for the staff-facing edit) -- logged under its own
+ * `user.profile_update` action so a self-edit is never confused with a staff-driven
+ * `customer.profile_update` in the audit trail.
+ */
+export async function updateOwnProfile(actor: Actor, input: { fullName?: string; phone?: string }) {
+  const changes: Record<string, unknown> = {}
+
+  if (input.fullName !== undefined) {
+    await prisma.user.update({ where: { userId: actor.userId }, data: { fullName: input.fullName } })
+    changes.fullName = input.fullName
+  }
+  if (input.phone !== undefined) {
+    await prisma.customer.upsert({
+      where: { userId: actor.userId },
+      create: { userId: actor.userId, phone: input.phone },
+      update: { phone: input.phone },
+    })
+    changes.phone = input.phone
+  }
+
+  if (Object.keys(changes).length > 0) {
+    await recordAuditLog({
+      userId: actor.userId,
+      role: actor.role,
+      action: 'user.profile_update',
+      entity: 'users',
+      entityId: actor.userId,
+      metadata: changes,
+    })
+  }
+
+  const [user, customer] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { userId: actor.userId } }),
+    prisma.customer.findUnique({ where: { userId: actor.userId } }),
+  ])
+  return { ...toPublicUser(user), phone: customer?.phone ?? null }
 }

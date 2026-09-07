@@ -64,6 +64,6 @@ export async function updateCustomerProfile(
     update: input,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'customer.profile_update', entity: 'customers', entityId: userId })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'customer.profile_update', entity: 'customers', entityId: userId })
   return toCustomerProfile(user, customer)
 }

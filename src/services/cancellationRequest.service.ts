@@ -3,6 +3,7 @@ import { ApiError } from '../middleware/errorHandler'
 import { isMoreThan24HoursBeforeBooking } from '../lib/dateTime'
 import { recordAuditLog } from './auditLog.service'
 import { updateBookingStatus } from './booking.service'
+import { createNotification } from './notification.service'
 import {
   sendCancellationRefundCompletedEmail,
   sendCancellationRequestRejectedEmail,
@@ -102,6 +103,7 @@ export async function requestCancellation(
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'cancellationRequest.create',
     entity: 'cancellation_requests',
     entityId: created.id,
@@ -195,7 +197,7 @@ export async function approveCancellationRequest(actor: Actor, id: number) {
     include: CANCELLATION_REQUEST_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'cancellationRequest.approve', entity: 'cancellation_requests', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'cancellationRequest.approve', entity: 'cancellation_requests', entityId: id })
 
   return toPublicCancellationRequest(updated)
 }
@@ -219,6 +221,7 @@ export async function rejectCancellationRequest(actor: Actor, id: number, reject
 
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'cancellationRequest.reject',
     entity: 'cancellation_requests',
     entityId: id,
@@ -234,6 +237,15 @@ export async function rejectCancellationRequest(actor: Actor, id: number, reject
       rejectionReason,
     })
   }
+
+  void createNotification({
+    userId: existing.customerId,
+    type: 'CANCELLATION_REQUEST_REJECTED',
+    title: 'Cancellation request rejected',
+    message: `Your cancellation request for booking JDM-${booking.id} was not approved.`,
+    relatedEntityType: 'booking',
+    relatedEntityId: booking.id,
+  }).catch((error) => console.error('[cancellationRequest.service] Failed to create notification:', error))
 
   return toPublicCancellationRequest(updated)
 }
@@ -261,7 +273,7 @@ export async function addRefundProof(actor: Actor, id: number, input: { fileUrl:
     include: CANCELLATION_REQUEST_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'cancellationRequest.refund_proof', entity: 'cancellation_requests', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'cancellationRequest.refund_proof', entity: 'cancellation_requests', entityId: id })
 
   return toPublicCancellationRequest(updated)
 }
@@ -291,7 +303,7 @@ export async function completeRefund(actor: Actor, id: number) {
     include: CANCELLATION_REQUEST_INCLUDE,
   })
 
-  await recordAuditLog({ userId: actor.userId, action: 'cancellationRequest.complete', entity: 'cancellation_requests', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'cancellationRequest.complete', entity: 'cancellation_requests', entityId: id })
 
   const customer = await prisma.user.findUnique({ where: { userId: existing.customerId } })
   if (customer?.email) {
@@ -305,6 +317,15 @@ export async function completeRefund(actor: Actor, id: number) {
       refundMethodName: updated.refundMethodNameSnapshot,
     })
   }
+
+  void createNotification({
+    userId: existing.customerId,
+    type: 'REFUND_COMPLETED',
+    title: 'Refund completed',
+    message: `Your refund for booking JDM-${booking.id} has been processed.`,
+    relatedEntityType: 'booking',
+    relatedEntityId: booking.id,
+  }).catch((error) => console.error('[cancellationRequest.service] Failed to create notification:', error))
 
   return toPublicCancellationRequest(updated)
 }

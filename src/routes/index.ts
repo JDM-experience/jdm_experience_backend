@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { auditLogsRoutes } from './auditLogs.routes'
 import { authRoutes } from './auth.routes'
 import { bookingsRoutes } from './bookings.routes'
 import { cancellationRequestsRoutes } from './cancellationRequests.routes'
@@ -8,6 +9,7 @@ import { currencyRoutes } from './currency.routes'
 import { customersRoutes } from './customers.routes'
 import { dashboardRoutes } from './dashboard.routes'
 import { healthRoutes } from './health.routes'
+import { notificationsRoutes } from './notifications.routes'
 import { paymentMethodsRoutes } from './paymentMethods.routes'
 import { paymentsRoutes } from './payments.routes'
 import { reviewsRoutes } from './reviews.routes'
@@ -42,6 +44,8 @@ export const allRoutes: RouteDefinition[] = [
   ...withTag('Currency', currencyRoutes),
   ...withTag('Dashboard', dashboardRoutes),
   ...withTag('Wishlist', wishlistRoutes),
+  ...withTag('Audit Logs', auditLogsRoutes),
+  ...withTag('Notifications', notificationsRoutes),
 ]
 
 const router = Router()

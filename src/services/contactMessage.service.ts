@@ -63,6 +63,7 @@ export async function updateMessageStatus(actor: Actor, id: number, status: Cont
   const updated = await prisma.contactMessage.update({ where: { id }, data: { status } })
   await recordAuditLog({
     userId: actor.userId,
+    role: actor.role,
     action: 'contact_message.status_update',
     entity: 'contact_messages',
     entityId: id,
@@ -76,5 +77,5 @@ export async function deleteMessage(actor: Actor, id: number): Promise<void> {
   if (!existing) throw new ApiError(404, 'Contact message not found.')
 
   await prisma.contactMessage.delete({ where: { id } })
-  await recordAuditLog({ userId: actor.userId, action: 'contact_message.delete', entity: 'contact_messages', entityId: id })
+  await recordAuditLog({ userId: actor.userId, role: actor.role, action: 'contact_message.delete', entity: 'contact_messages', entityId: id })
 }
