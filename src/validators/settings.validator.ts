@@ -111,6 +111,9 @@ const policyPageSchema = z
     type: policyTypeEnum.meta({ example: 'BOOKING' }),
     title: z.string().meta({ example: 'Booking Policy' }),
     content: z.string().meta({ example: '<ul><li>Reservations are first-come, first-served.</li></ul>' }),
+    version: z.number().int().positive().meta({ example: 1 }),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/i).nullable(),
+    effectiveAt: z.string().nullable(),
   })
   .meta({ id: 'PolicyPage' })
 

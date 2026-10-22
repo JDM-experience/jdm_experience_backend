@@ -20,6 +20,14 @@ export const createBookingSchema = z.object({
   customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address.'),
   customerPhone: z.string().trim().min(1, 'Phone number is required.').max(50),
   paymentMethodId: z.number().int().positive(),
+  policyConsents: z.object({
+    termsAccepted: z.literal(true),
+    privacyAcknowledged: z.literal(true),
+    termsVersion: z.number().int().positive(),
+    termsHash: z.string().regex(/^[a-f0-9]{64}$/i),
+    privacyVersion: z.number().int().positive(),
+    privacyHash: z.string().regex(/^[a-f0-9]{64}$/i),
+  }),
   paymentProof: z.object({
     fileUrl: z.string().trim().min(1, 'Payment proof is required.').max(500),
     fileName: z.string().trim().min(1).max(255),

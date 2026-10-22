@@ -8,6 +8,7 @@ import { createNotification } from './notification.service'
 import { notifyPaymentProofSubmitted } from './payment.service'
 import { getEffectiveTourPrice, resolveTourWhatsapp } from './tour.service'
 import { Prisma, type BookingStatus, type PaymentStatus, type Role } from '../generated/prisma/client'
+import { getCurrentPolicyRevision } from './settings.service'
 
 type Actor = { userId: number; role: Role }
 
@@ -61,11 +62,10 @@ function toPublicBooking(b: BookingWithRelations) {
  * gone but no Booking exists yet, or vice versa.
  *
  * The checkout page is the only place a reservation is created, and it always has contact info,
- * a payment method, and payment proof by the time the customer confirms — so all three are
- * required here and created in the same transaction as the Booking itself, rather than as a
- * separate follow-up call. None of it is trusted from the frontend at face value: the payment
- * method is re-checked for existence/active status server-side regardless of what the client
- * already showed the customer (it may have changed since the checkout page loaded).
+ * a payment method, payment proof, and separate acceptance/acknowledgment of the current policy
+ * versions by the time the customer confirms. The proof and consent evidence are created in the
+ * same transaction as the Booking itself, rather than as separate follow-up calls. Policy versions
+ * and payment-method status are verified on the server.
  */
 export async function createBooking(
   actor: Actor,
@@ -78,6 +78,14 @@ export async function createBooking(
     customerEmail: string
     customerPhone: string
     paymentMethodId: number
+    policyConsents: {
+      termsAccepted: true
+      privacyAcknowledged: true
+      termsVersion: number
+      termsHash: string
+      privacyVersion: number
+      privacyHash: string
+    }
     paymentProof: { fileUrl: string; fileName: string; fileType: string }
   },
 ) {
@@ -115,6 +123,22 @@ export async function createBooking(
   // Interactive transaction (not the array form) -- the proof's bookingId depends on the id the
   // booking create just generated, which the array form of $transaction can't reference.
   const [booking, proof] = await prisma.$transaction(async (tx) => {
+    const [termsRevision, privacyRevision] = await Promise.all([
+      getCurrentPolicyRevision(tx, 'TERMS'),
+      getCurrentPolicyRevision(tx, 'PRIVACY'),
+    ])
+    if (!termsRevision || !privacyRevision) {
+      throw new ApiError(409, 'The Terms and Privacy Policy must be published before reservations can be submitted.')
+    }
+    if (
+      input.policyConsents.termsVersion !== termsRevision.version ||
+      input.policyConsents.termsHash !== termsRevision.contentHash ||
+      input.policyConsents.privacyVersion !== privacyRevision.version ||
+      input.policyConsents.privacyHash !== privacyRevision.contentHash
+    ) {
+      throw new ApiError(409, 'A policy has changed since you reviewed it. Refresh the policies and confirm again.')
+    }
+
     const hold = await tx.tourDateHold.findUnique({
       where: { tourId_bookingDate: { tourId: input.tourId, bookingDate } },
     })
@@ -164,6 +188,28 @@ export async function createBooking(
         fileName: input.paymentProof.fileName,
         fileType: input.paymentProof.fileType,
       },
+    })
+    await tx.bookingConsent.createMany({
+      data: [
+        {
+          bookingId: createdBooking.id,
+          userId: actor.userId,
+          type: 'TERMS_AGREEMENT',
+          granted: input.policyConsents.termsAccepted,
+          policyRevisionId: termsRevision.id,
+          documentVersion: termsRevision.version,
+          documentHash: termsRevision.contentHash,
+        },
+        {
+          bookingId: createdBooking.id,
+          userId: actor.userId,
+          type: 'PRIVACY_ACKNOWLEDGMENT',
+          granted: input.policyConsents.privacyAcknowledged,
+          policyRevisionId: privacyRevision.id,
+          documentVersion: privacyRevision.version,
+          documentHash: privacyRevision.contentHash,
+        },
+      ],
     })
     return [createdBooking, createdProof] as const
   })
