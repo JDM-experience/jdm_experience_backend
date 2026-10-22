@@ -26,6 +26,19 @@ yarn dev
 
 Server starts on `http://localhost:3000` (see `.env`). Health check: `GET /api/health`.
 
+The booking-consent and policy-version schema adds `policy_revisions` and `booking_consents`.
+Apply the updated schema and regenerate Prisma before deploying the booking API:
+
+```bash
+yarn prisma db push
+yarn prisma generate
+```
+
+Before accepting reservations, an administrator must review and publish the Terms and Privacy
+drafts from Website Settings. Replace all operator/contact/retention placeholders and verify
+service-provider regions and any international data transfers; the drafts are not legal advice
+or a representation of compliance.
+
 ## API documentation
 
 Interactive Swagger UI at `/api/docs` (local: http://localhost:3000/api/docs, production:

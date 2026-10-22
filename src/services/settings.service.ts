@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto'
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/errorHandler'
 import { recordAuditLog } from './auditLog.service'
-import type { PolicyType, Role, SocialPlatform } from '../generated/prisma/client'
+import { Prisma, type PolicyType, type Role, type SocialPlatform } from '../generated/prisma/client'
 
 const SETTINGS_ID = 1
 const ABOUT_ID = 1
@@ -155,23 +156,96 @@ export async function updateAboutContent(actor: Actor, input: { title?: string; 
   return { title: row.title, content: row.content }
 }
 
-function toPublicPolicyPage(row: { type: PolicyType; title: string; content: string }) {
-  return { type: row.type, title: row.title, content: row.content }
+function policyContentHash(title: string, content: string): string {
+  return createHash('sha256').update(JSON.stringify([title, content]), 'utf8').digest('hex')
+}
+
+function toPublicPolicyPage(
+  row: { type: PolicyType; title: string; content: string; version: number },
+  revision?: { contentHash: string; effectiveAt: Date } | null,
+) {
+  return {
+    type: row.type,
+    title: row.title,
+    content: row.content,
+    version: row.version,
+    contentHash: revision?.contentHash ?? null,
+    effectiveAt: revision?.effectiveAt ?? null,
+  }
+}
+
+/** Returns the immutable snapshot for the current published document, creating the initial
+ *  snapshot for policy rows that existed before versioning was introduced. */
+export async function getCurrentPolicyRevision(
+  tx: Prisma.TransactionClient,
+  type: PolicyType,
+) {
+  const page = await tx.policyPage.findUnique({ where: { type } })
+  if (!page || !page.content.trim()) return null
+
+  return tx.policyRevision.upsert({
+    where: { policyPageId_version: { policyPageId: page.id, version: page.version } },
+    create: {
+      policyPageId: page.id,
+      version: page.version,
+      title: page.title,
+      content: page.content,
+      contentHash: policyContentHash(page.title, page.content),
+    },
+    update: {},
+  })
 }
 
 /** A policy type with no row, or empty content, is simply omitted here -- the public Policy page
  *  only renders what an admin has actually written, mirroring how an unset social link hides its
  *  icon instead of rendering an empty/broken section. */
 export async function listPolicies() {
-  const rows = await prisma.policyPage.findMany({ where: { content: { not: '' } }, orderBy: { type: 'asc' } })
-  return rows.map(toPublicPolicyPage)
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.policyPage.findMany({ where: { content: { not: '' } }, orderBy: { type: 'asc' } })
+    return Promise.all(
+      rows.map(async (row) => {
+        const revision = await tx.policyRevision.upsert({
+          where: { policyPageId_version: { policyPageId: row.id, version: row.version } },
+          create: {
+            policyPageId: row.id,
+            version: row.version,
+            title: row.title,
+            content: row.content,
+            contentHash: policyContentHash(row.title, row.content),
+          },
+          update: {},
+        })
+        return toPublicPolicyPage(row, revision)
+      }),
+    )
+  })
 }
 
 export async function updatePolicy(actor: Actor, type: PolicyType, input: { title?: string; content?: string }) {
-  const row = await prisma.policyPage.upsert({
-    where: { type },
-    create: { type, title: input.title ?? type, content: input.content ?? '' },
-    update: { title: input.title, content: input.content },
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.policyPage.findUnique({ where: { type } })
+    if (!existing) {
+      const row = await tx.policyPage.create({
+        data: { type, title: input.title ?? type, content: input.content ?? '' },
+      })
+      const revision = await getCurrentPolicyRevision(tx, type)
+      return { row, revision }
+    }
+
+    const title = input.title ?? existing.title
+    const content = input.content ?? existing.content
+    if (title === existing.title && content === existing.content) {
+      const revision = await getCurrentPolicyRevision(tx, type)
+      return { row: existing, revision }
+    }
+
+    await getCurrentPolicyRevision(tx, type)
+    const row = await tx.policyPage.update({
+      where: { type },
+      data: { title, content, version: { increment: 1 } },
+    })
+    const revision = await getCurrentPolicyRevision(tx, type)
+    return { row, revision }
   })
 
   await recordAuditLog({
@@ -179,17 +253,20 @@ export async function updatePolicy(actor: Actor, type: PolicyType, input: { titl
     role: actor.role,
     action: 'settings.policy_update',
     entity: 'policy_pages',
-    entityId: row.id,
+    entityId: result.row.id,
   })
-  return toPublicPolicyPage(row)
+  return toPublicPolicyPage(result.row, result.revision)
 }
 
 /** Staff-only read (unlike listPolicies, which the public Policy page uses) -- the admin editor
  *  needs to see a type's current title/content even if content is still empty/unset. */
 export async function getPolicyForAdmin(type: PolicyType) {
-  const row = await prisma.policyPage.findUnique({ where: { type } })
-  if (!row) return { type, title: type, content: '' }
-  return toPublicPolicyPage(row)
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.policyPage.findUnique({ where: { type } })
+    if (!row) return { type, title: type, content: '', version: 1, contentHash: null, effectiveAt: null }
+    const revision = await getCurrentPolicyRevision(tx, type)
+    return toPublicPolicyPage(row, revision)
+  })
 }
 
 function toPublicFaq(row: { id: number; question: string; answer: string; displayOrder: number; isPublished: boolean }) {

@@ -69,6 +69,7 @@ model User {
   wishlists     Wishlist[]
   notifications Notification[]
   tourDateHolds TourDateHold[]
+  consentRecords BookingConsent[]
 
   @@map("users")
 }
@@ -131,6 +132,11 @@ enum PolicyType {
   CANCELLATION
   PAYMENT
   CONDUCT
+}
+
+enum BookingConsentType {
+  TERMS_AGREEMENT
+  PRIVACY_ACKNOWLEDGMENT
 }
 
 /// Guide-specific profile extension for TOUR_GUIDE users. Identity/login lives on `User`.
@@ -297,6 +303,7 @@ model Booking {
   payments          Payment[]
   paymentProofs     PaymentProof[]
   cancellationRequest CancellationRequest?
+  consentRecords   BookingConsent[]
 
   @@index([userId])
   @@index([tourId])
@@ -481,9 +488,49 @@ model PolicyPage {
   type      PolicyType @unique
   title     String
   content   String
+  version   Int        @default(1)
   updatedAt DateTime   @updatedAt @map("updated_at")
+  revisions PolicyRevision[]
 
   @@map("policy_pages")
+}
+
+/// Immutable snapshot of each published policy version. The content hash is SHA-256 over the
+/// title and exact HTML content, and BookingConsent points to the snapshot customers saw.
+model PolicyRevision {
+  id           Int        @id @default(autoincrement())
+  policyPageId Int        @map("policy_page_id")
+  version      Int
+  title        String
+  content      String
+  contentHash  String     @map("content_hash") @db.VarChar(64)
+  effectiveAt  DateTime   @default(now()) @map("effective_at")
+  policyPage   PolicyPage @relation(fields: [policyPageId], references: [id], onDelete: Restrict)
+  consents     BookingConsent[]
+
+  @@unique([policyPageId, version])
+  @@map("policy_revisions")
+}
+
+/// Append-only evidence for the separate Terms agreement and Privacy notice acknowledgment.
+/// This does not represent blanket consent to all personal-information processing.
+model BookingConsent {
+  id               Int               @id @default(autoincrement())
+  bookingId        Int               @map("booking_id")
+  userId           Int               @map("user_id")
+  type             BookingConsentType
+  granted          Boolean           @default(true)
+  grantedAt        DateTime          @default(now()) @map("granted_at")
+  policyRevisionId Int               @map("policy_revision_id")
+  documentVersion  Int               @map("document_version")
+  documentHash     String            @map("document_hash") @db.VarChar(64)
+  booking          Booking           @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [userId], onDelete: Restrict)
+  policyRevision   PolicyRevision    @relation(fields: [policyRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, type])
+  @@index([userId, type])
+  @@map("booking_consents")
 }
 
 /// Multiple rows (unlike the singleton AppSettings/AboutContent, or one-per-type PolicyPage) --
